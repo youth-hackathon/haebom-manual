@@ -180,6 +180,11 @@ class Guide:
 
         # 3. artemis
         areq = {k: v for k, v in req.items() if k not in ("manual_id", "device_model")}
+        if manual.get("task"):
+            # The person may have asked with another sentence of this manual (an alias) that says less ("알람 8시"):
+            # artemis gets the manual's own sentence, with whatever note the app put after it.
+            head, sep, rest = str(req.get("task", "")).partition(chr(10) * 2)
+            areq["task"] = manual["task"] + sep + rest
         if last and last["source"] == "manual" and event != "start" and "replay" not in areq:
             # artemis never saw the step the manual guided. Tell it what that step was, the way a replay does, so its
             # own history says the step before this screen was done.

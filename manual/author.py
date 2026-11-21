@@ -182,6 +182,10 @@ class Author:
             log(f"manual {manual['id']} ({manual.get('status')}, {len(manual['steps'])} step(s)): {manual['task']}")
         mid = manual["id"]
         job["manual"] = mid
+        for alias in job.get("aliases") or []:
+            if alias not in manual["aliases"] and alias != manual["task"]:
+                manual["aliases"].append(alias)
+                self.manuals.save(manual)
         if job.get("goal") or job.get("reset") or job.get("done"):
             if job.get("done"):
                 manual["done"] = job["done"]
@@ -341,6 +345,8 @@ class Author:
             return 409, {"error": "another authoring job is running on the device"}
         job = self.new_job(task, body.get("id"), str(body.get("serial") or os.environ.get("DEVICE_SERIAL", DEFAULT_SERIAL)),
                            starts, int(body.get("rounds") or 3), bool(body.get("fresh")), os.environ.get("APP_APK", ""))
+        if isinstance(body.get("aliases"), list):
+            job["aliases"] = [str(x) for x in body["aliases"]]
         if isinstance(body.get("done"), dict) and body["done"].get("fact"):
             job["done"] = body["done"]
         goal = body.get("goal")
@@ -424,6 +430,7 @@ def main() -> int:
     r.add_argument("--goal-shell", default="", help="일이 됐는지 기기에 묻는 adb shell 명령")
     r.add_argument("--goal-expect", default="", help="됐을 때 그 명령의 출력에 있어야 하는 것 (정규식)")
     r.add_argument("--reset", action="append", default=[], help="일을 안 한 상태로 되돌리는 adb shell 명령 (여러 번 쓸 수 있다)")
+    r.add_argument("--alias", action="append", default=[], help="같은 매뉴얼로 이어지는 다른 요청 문장 (여러 번 쓸 수 있다)")
     r.add_argument("--done-fact", default="", help="완료를 알려 주는 폰 설정값의 이름 (앱이 요청에 싣는 facts의 키: font_scale, next_alarm 등)")
     r.add_argument("--done-change", default="", choices=["", "increased", "decreased", "on", "off"], help="그 값이 세션 시작 때보다 어떻게 되면 완료인지")
     r.add_argument("--done-equals", default="", help="그 값이 무엇과 같으면 완료인지 (예: 08:00)")
@@ -451,6 +458,8 @@ def main() -> int:
         job["goal"] = {"shell": a.goal_shell, "expect": a.goal_expect}
     if a.reset:
         job["reset"] = list(a.reset)
+    if a.alias:
+        job["aliases"] = list(a.alias)
     if a.done_fact:
         if bool(a.done_change) == bool(a.done_equals):
             ap.error("--done-fact needs exactly one of --done-change and --done-equals")
