@@ -178,6 +178,16 @@ class Manuals:
             self.save(m)
             return sid
 
+    def count_met(self, mid: str, step_id: int) -> None:
+        """Authoring: the person did what this step guided. A step that has worked is not thrown away for one misfire."""
+        with self._lock:
+            m = self._items.get(str(mid))
+            for st in (m or {}).get("steps", []):
+                if st["id"] == step_id:
+                    st["met"] = int(st.get("met") or 0) + 1
+                    self.save(m)
+                    return
+
     def set_requires(self, mid: str, step_id: int, requires: list[dict]) -> None:
         """What a step relies on from the steps before it (its kernel is its own condition and these)."""
         with self._lock:

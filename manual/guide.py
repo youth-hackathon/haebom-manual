@@ -252,13 +252,24 @@ class Guide:
         action = prev["action"]
         seq = prev["step"]["seq"] if prev["source"] == "manual" else None
         st["events"].append({"step": prev["req"]["step"], "source": prev["source"], "seq": seq, "action": label(action), "outcome": event})
+        # A swipe that opened another surface (home to the app list) ends with the swiped area gone. The app reports that
+        # as "unaimable: target-lost ... the screen changed after the swipe": the swipe was done and it worked.
+        swiped = action.get("name") == "swipe" and event == "unaimable" and "the screen changed after the swipe" in detail
+        if swiped:
+            event = "met"
+            st["events"][-1]["outcome"] = "met (the swiped area gave way to another screen)"
         if prev["source"] == "manual" and event in ("declared_stuck", "unaimable"):
-            # The step misled on this screen. This session does not get it again; while authoring it is removed.
+            # The step misled on this screen. This session does not get it again. While authoring, a step that never
+            # worked is removed; one that has worked before stays (its condition was met by a screen it is not for).
+            worked = int(prev["step"].get("met") or 0)
             st["skip"].add(prev["step"]["id"])
-            st["dropped"].append({"seq": seq, "action": label(action), "why": event + (f": {detail}" if detail else "")})
-            if self.authoring and st["manual_id"]:
+            st["dropped"].append({"seq": seq, "action": label(action), "why": event + (f": {detail}" if detail else ""), "kept": worked > 0})
+            if self.authoring and st["manual_id"] and not worked:
                 self.manuals.delete_step(st["manual_id"], prev["step"]["id"])
-            print(f"[guide] {sid} manual step #{seq} {'removed' if self.authoring else 'set aside'} after '{event}'", flush=True)
+            print(f"[guide] {sid} manual step #{seq} {'removed' if self.authoring and not worked else 'set aside'} after '{event}'"
+                  + (f" (it has worked {worked} time(s) before)" if worked else ""), flush=True)
+        if event == "met" and prev["source"] == "manual" and self.authoring and st["manual_id"]:
+            self.manuals.count_met(st["manual_id"], prev["step"]["id"])
         if event == "met":
             # Only what the person actually did goes on record, and only for the review at the end of the session.
             st["trace"].append({"source": prev["source"], "screen": prev["screen"], "reply": prev.get("reply"), "step": prev.get("step")})
