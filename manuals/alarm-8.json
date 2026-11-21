@@ -1,0 +1,448 @@
+{
+  "id": "alarm-8",
+  "task": "오전 8시에 알람 설정하기",
+  "aliases": [
+    "알람 8시에 설정하기",
+    "알람 8시에 맞춰줘"
+  ],
+  "status": "verified",
+  "steps": [
+    {
+      "id": 9,
+      "seq": 0,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "entry": true,
+      "instruction": "홈 화면으로 가서 이어서 해요.",
+      "screen_condition": {
+        "not": {
+          "any": [
+            {
+              "foreground": "com.android.deskclock"
+            },
+            {
+              "foreground": "com.android.launcher3"
+            }
+          ]
+        }
+      },
+      "done_condition": {
+        "name": "press_key",
+        "key": "HOME"
+      },
+      "met": 2
+    },
+    {
+      "id": 10,
+      "seq": 1,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "시계 앱을 찾기 위해 화면을 위로 쓸어올려 앱 서랍을 엽니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.launcher3"
+          },
+          {
+            "node": {
+              "id": "workspace"
+            }
+          },
+          {
+            "node": {
+              "id": "accessibility_action_view"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "swipe",
+        "direction": "up"
+      },
+      "met": 9
+    },
+    {
+      "id": 2,
+      "seq": 3,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "알람을 설정하기 위해 시계 앱을 실행합니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.launcher3"
+          },
+          {
+            "node": {
+              "text": "시계"
+            }
+          },
+          {
+            "node": {
+              "id": "apps_list_view"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "text": "시계"
+        }
+      },
+      "met": 9
+    },
+    {
+      "id": 3,
+      "seq": 4,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "알람을 설정하기 위해 상단의 알람 탭을 눌러주세요.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.deskclock"
+          },
+          {
+            "node": {
+              "text": "알람"
+            }
+          },
+          {
+            "node": {
+              "text": "타이머"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "text": "알람"
+        }
+      },
+      "met": 7
+    },
+    {
+      "id": 4,
+      "seq": 5,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "오전 8시 알람 설정을 위해 하단의 + 버튼을 누릅니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.deskclock"
+          },
+          {
+            "node": {
+              "desc": "알람 추가"
+            }
+          },
+          {
+            "node": {
+              "text": "월, 화, 수, 목, 금"
+            }
+          },
+          {
+            "node": {
+              "desc": "월요일, 화요일, 수요일, 목요일, 금요일"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "desc": "알람 추가"
+        }
+      },
+      "met": 7
+    },
+    {
+      "id": 5,
+      "seq": 6,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "오전 알람으로 맞추기 위해 '오전'을 눌러주세요.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.deskclock"
+          },
+          {
+            "node": {
+              "text": "오전"
+            }
+          },
+          {
+            "node": {
+              "id": "time_header"
+            }
+          },
+          {
+            "node": {
+              "id": "ampm_layout"
+            }
+          },
+          {
+            "node": {
+              "text": "오전",
+              "checked": false
+            }
+          },
+          {
+            "node": {
+              "text": "오후",
+              "checked": true
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "text": "오전"
+        }
+      },
+      "met": 8
+    },
+    {
+      "id": 6,
+      "seq": 7,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "알람 시간을 8시로 설정하기 위해 숫자 8을 누릅니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.deskclock"
+          },
+          {
+            "node": {
+              "desc": "8"
+            }
+          },
+          {
+            "node": {
+              "id": "time_header"
+            }
+          },
+          {
+            "node": {
+              "text": "오전",
+              "checked": true
+            }
+          },
+          {
+            "node": {
+              "text": "오후",
+              "checked": false
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "desc": "8"
+        }
+      },
+      "requires": [
+        {
+          "node": {
+            "text": "오전",
+            "checked": true
+          }
+        },
+        {
+          "node": {
+            "text": "오후",
+            "checked": false
+          }
+        }
+      ],
+      "met": 8
+    },
+    {
+      "id": 7,
+      "seq": 8,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "알람 시간을 정각으로 맞추기 위해 00분을 선택합니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.deskclock"
+          },
+          {
+            "node": {
+              "desc": "0"
+            }
+          },
+          {
+            "node": {
+              "id": "time_header"
+            }
+          },
+          {
+            "node": {
+              "text": "오전",
+              "checked": true
+            }
+          },
+          {
+            "node": {
+              "text": "오후",
+              "checked": false
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "desc": "0"
+        }
+      },
+      "requires": [
+        {
+          "node": {
+            "text": "오전",
+            "checked": true
+          }
+        },
+        {
+          "node": {
+            "text": "오후",
+            "checked": false
+          }
+        },
+        {
+          "node": {
+            "id": "hours",
+            "text": "8"
+          }
+        }
+      ],
+      "met": 7
+    },
+    {
+      "id": 8,
+      "seq": 9,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "확인을 눌러 오전 8시 알람 설정을 완료합니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.deskclock"
+          },
+          {
+            "node": {
+              "text": "확인"
+            }
+          },
+          {
+            "node": {
+              "id": "minutes",
+              "text": "00"
+            }
+          },
+          {
+            "node": {
+              "text": "오전",
+              "checked": true
+            }
+          },
+          {
+            "node": {
+              "text": "오후",
+              "checked": false
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "text": "확인"
+        }
+      },
+      "requires": [
+        {
+          "node": {
+            "text": "오전",
+            "checked": true
+          }
+        },
+        {
+          "node": {
+            "text": "오후",
+            "checked": false
+          }
+        },
+        {
+          "node": {
+            "id": "hours",
+            "text": "8"
+          }
+        },
+        {
+          "node": {
+            "id": "minutes",
+            "text": "00"
+          }
+        }
+      ],
+      "met": 8
+    }
+  ],
+  "created_at": "2026-11-21T12:27:45",
+  "updated_at": "2026-11-21T12:51:37",
+  "done": {
+    "fact": "next_alarm",
+    "equals": "08:00",
+    "say": "오전 8시 알람이 맞춰졌어요."
+  },
+  "goal": {
+    "shell": "su 0 content query --uri content://com.android.deskclock/alarms --projection hour:minutes:enabled",
+    "expect": "hour=8, minutes=0, enabled=1"
+  },
+  "reset": [
+    "pm clear com.android.deskclock"
+  ],
+  "first_run": {
+    "start": "cold",
+    "seconds": 149.1,
+    "manual_turns": 0,
+    "model_turns": 9
+  },
+  "verified": {
+    "at": "2026-11-21T12:51:37",
+    "device_model": "Cuttlefish x86_64 phone 64-bit only",
+    "starts": {
+      "cold": {
+        "clean": true,
+        "runs": 1
+      }
+    },
+    "runs": 3,
+    "model_turns_total": 0,
+    "clean_run": {
+      "start": "cold",
+      "seconds": 54.6,
+      "manual_turns": 11,
+      "model_turns": 0
+    },
+    "mistakes": [
+      {
+        "mistake": "at:확인=tap:오후",
+        "recovered": true,
+        "seconds": 53.4,
+        "manual_turns": 10,
+        "model_turns": 0,
+        "rewinds": 1
+      },
+      {
+        "mistake": "at:'8'=home",
+        "recovered": true,
+        "seconds": 54.6,
+        "manual_turns": 11,
+        "model_turns": 0,
+        "rewinds": 1
+      }
+    ]
+  }
+}

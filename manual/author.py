@@ -269,8 +269,8 @@ class Author:
         ok = bool(report["starts"]) and all(s["clean"] for s in report["starts"].values())
         m = self.manuals.get(mid)
         first = m.get("first_run")
-        last = next((r for r in reversed(report["runs"]) if r["clean"] and r["start"] == "cold"), None) or \
-            next((r for r in reversed(report["runs"]) if r["clean"]), None)
+        last = next((r for r in reversed([x for x in report["runs"] if not x.get("mistake")]) if r["clean"] and r["start"] == "cold"), None) or \
+            next((r for r in reversed([x for x in report["runs"] if not x.get("mistake")]) if r["clean"]), None)
         m["status"] = report["status"] = "verified" if ok else "draft"
         m["verified"] = {
             "at": time.strftime("%Y-%m-%dT%H:%M:%S"), "device_model": device_model, "starts": report["starts"], "runs": len(report["runs"]),
