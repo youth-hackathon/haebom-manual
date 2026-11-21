@@ -7,6 +7,10 @@ for. A typing step follows its `TYPEPHASE`: open (tap the field), type, submit (
 Text adb cannot type (Hangul) is copied with the guide's copy icon and pasted, as a person may.
 Every armed step is screenshotted. The app itself never acts; this script stands in for the person.
 
+After each tap, long-press or swipe the script reads the accessibility tree again (the app's DEBUG_DUMP) and
+says in its transcript whether the screen changed. A swipe is tried in several ways until the tree shows the
+screen moved; when none does, the script stops with exit code 3 instead of telling the guide it is stuck.
+
 usage: python -I scripts/follow.py "와이파이 설정 화면 열어줘" [--serial 127.0.0.1:6520] [--max-steps 15]
        python -I scripts/follow.py "설정에서 battery를 검색해줘" --home --deviate step2=back
 
@@ -33,6 +37,10 @@ from pathlib import Path
 ADB = os.environ.get("ADB") or shutil.which("adb") or str(
     Path(os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT") or ".") / "platform-tools" / "adb")
 TAG = "ToolusGuide"
+PKG = "ai.toolus.mobileguide"
+# Ways of dragging, tried in order until the screen moves: (start, end) as fractions of the swiped area, and how long.
+# The first starts low: the AOSP launcher opens its app list only for a drag that starts on the bottom row of icons.
+SWIPES = ((0.90, 0.15, 300), (0.83, 0.20, 400), (0.75, 0.15, 200), (0.90, 0.15, 150))
 
 
 def adb(serial: str, *args: str, text: bool = True, timeout: int = 30):
@@ -59,20 +67,88 @@ def rect(s: str):
     return l, t, r, b
 
 
-def swipe_for(chevron: str, vp, size):
+def swipe_for(chevron: str, vp, size, start: float = 0.83, end: float = 0.20):
     w, h = size
     l, t, r, b = vp if vp else (0, int(h * 0.12), w, int(h * 0.88))
     cx, cy = (l + r) // 2, (t + b) // 2
-    # The chevron points where the hidden content is; the finger moves the other way. A person asked to "push the
-    # screen up" drags most of its length: a short drag (45 % of the height) did not open the app list of the AOSP
-    # launcher, so the finger travels from 80 % to 15 %.
+    # The chevron points where the hidden content is; the finger moves the other way.
     if chevron == "down":
-        return cx, t + int((b - t) * 0.80), cx, t + int((b - t) * 0.15)
+        return cx, t + int((b - t) * start), cx, t + int((b - t) * end)
     if chevron == "up":
-        return cx, t + int((b - t) * 0.20), cx, t + int((b - t) * 0.85)
+        return cx, t + int((b - t) * (1 - start)), cx, t + int((b - t) * (1 - end))
     if chevron == "right":
-        return l + int((r - l) * 0.85), cy, l + int((r - l) * 0.15), cy
-    return l + int((r - l) * 0.15), cy, l + int((r - l) * 0.85), cy
+        return l + int((r - l) * start), cy, l + int((r - l) * end), cy
+    return l + int((r - l) * (1 - start)), cy, l + int((r - l) * (1 - end)), cy
+
+
+def tree(serial: str):
+    """The screen as the accessibility service reads it (the app's DEBUG_DUMP): (foreground package, elements).
+
+    An element is (class, label, view id, bounds). The status bar is left out: its clock changes by itself.
+    This is how the script knows what its own tap or swipe did. It never judges that from a picture.
+    """
+    nonce = str(time.time_ns())
+    adb(serial, "shell", f"log -t {TAG} -p i 'HARNESS tree {nonce}'")
+    adb(serial, "shell", f"am broadcast -a {PKG}.DEBUG_DUMP -p {PKG}")
+    best = None
+    for _ in range(14):
+        time.sleep(0.2)
+        lines = adb(serial, "logcat", "-d", "-s", f"{TAG}:I", "-t", "500").stdout.splitlines()
+        at = next((i for i in range(len(lines) - 1, -1, -1) if f"HARNESS tree {nonce}" in lines[i]), None)
+        if at is None:
+            continue
+        dump = [x.split("DUMP ", 1)[1] for x in lines[at:] if "DUMP " in x]
+        head = next((re.match(r"Screen (\d+)x(\d+), foreground package: (\S*)", x) for x in dump if x.startswith("Screen ")), None)
+        if head is None:
+            continue
+        height = int(head.group(2))
+        els = set()
+        for x in dump:
+            m = re.match(r"\[\d+\] (\S+) '(.*?)' (\S*) .*?\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]\s*$", x)
+            if m and int(m.group(7)) > height * 0.06:
+                els.add((m.group(1), m.group(2), m.group(3), m.group(4), m.group(5), m.group(6), m.group(7)))
+        now = (head.group(3), frozenset(els))
+        if best is not None and now == best:
+            return now  # two reads in a row agree: the whole dump has arrived
+        best = now
+    return best or ("", frozenset())
+
+
+def changed(serial: str, before, wait: float = 2.4):
+    """Whether the screen is another one than `before` within `wait` seconds, and what it is now."""
+    end = time.time() + wait
+    now = before
+    while time.time() < end:
+        now = tree(serial)
+        if now != before:
+            return True, now
+    return False, now
+
+
+def tap_checked(serial: str, x: int, y: int, what: str, long: bool = False) -> str:
+    """Tap (or long-press) and read from the tree whether anything happened; a tap that did nothing is done once more."""
+    before = tree(serial)
+    for attempt in (1, 2):
+        if long:
+            adb(serial, "shell", "input", "swipe", str(x), str(y), str(x), str(y), "900")
+        else:
+            adb(serial, "shell", "input", "tap", str(x), str(y))
+        ok, _ = changed(serial, before)
+        if ok:
+            return what + (" (the screen changed)" if attempt == 1 else " (the screen changed on the second try)")
+    return what + " (TWICE, and the screen did NOT change)"
+
+
+def swipe_checked(serial: str, chevron: str, vp, size) -> tuple[str, bool]:
+    """Drag the way the chevron asks until the tree shows the screen moved. Says so when no way of dragging moved it."""
+    before = tree(serial)
+    for start, end, ms in SWIPES:
+        x1, y1, x2, y2 = swipe_for(chevron, vp, size, start, end)
+        adb(serial, "shell", "input", "swipe", str(x1), str(y1), str(x2), str(y2), str(ms))
+        ok, _ = changed(serial, before)
+        if ok:
+            return f"swipe {chevron} ({x1},{y1} to {x2},{y2} in {ms}ms; the screen changed)", True
+    return f"swipe {chevron}: the screen did NOT change after {len(SWIPES)} ways of dragging", False
 
 
 def find_on_screen(serial: str, label: str = "", view_id: str = ""):
@@ -256,15 +332,15 @@ def main() -> int:
             elif verb == "type_guide" and arm.get("phase") in ("open", "submit") and ring:
                 # open: tap the field so the keyboard comes up; submit: tap the keyboard key the ring is on
                 x, y = (ring[0] + ring[2]) // 2, (ring[1] + ring[3]) // 2
-                adb(a.serial, "shell", "input", "tap", str(x), str(y)); did = f"tap {x},{y} ({arm['phase']})"
+                did = tap_checked(a.serial, x, y, f"tap {x},{y} ({arm['phase']})")
             elif verb == "type_guide" and arm.get("phase") == "submit-words":
                 adb(a.serial, "shell", "input", "keyevent", "KEYCODE_ENTER"); did = "key KEYCODE_ENTER (the keyboard hides its keys)"
             elif ring and verb in ("click_guide", "launch_guide", "press_guide"):
                 x, y = (ring[0] + ring[2]) // 2, (ring[1] + ring[3]) // 2
-                adb(a.serial, "shell", "input", "tap", str(x), str(y)); did = f"tap {x},{y}"
+                did = tap_checked(a.serial, x, y, f"tap {x},{y}")
             elif ring and verb == "long_press_guide":
                 x, y = (ring[0] + ring[2]) // 2, (ring[1] + ring[3]) // 2
-                adb(a.serial, "shell", "input", "swipe", str(x), str(y), str(x), str(y), "900"); did = f"long-press {x},{y}"
+                did = tap_checked(a.serial, x, y, f"long-press {x},{y}", long=True)
             elif ring and verb == "type_guide":
                 x, y = (ring[0] + ring[2]) // 2, (ring[1] + ring[3]) // 2
                 adb(a.serial, "shell", "input", "tap", str(x), str(y)); time.sleep(0.6)
@@ -273,7 +349,9 @@ def main() -> int:
                     adb(a.serial, "shell", "input", "keyevent", "KEYCODE_DEL"); time.sleep(0.3)
                 typed = (arm["text"] or "").replace("\\n", "")
                 if typed.isascii():
-                    adb(a.serial, "shell", "input", "text", typed.replace(" ", "%s")); did = f"type '{typed}'"
+                    adb(a.serial, "shell", "input", "text", typed.replace(" ", "%s"))
+                    shown = any(typed.replace(" ", "").lower() in el[1].replace(" ", "").lower() for el in changed(a.serial, None, 1.5)[1][1])
+                    did = f"type '{typed}'" + (" (the field shows it)" if shown else " (the field does NOT show it)")
                 else:
                     # adb cannot type Hangul: copy it with the guide's copy icon and paste it, as a person may
                     btn = latest_copybtn(a.serial)
@@ -286,9 +364,16 @@ def main() -> int:
                         did = "no copy icon on screen: typed nothing"
                 # a step that sends the text then rings the keyboard's action key (TYPEPHASE submit); that is followed then
             elif chev:
-                x1, y1, x2, y2 = swipe_for(chev, aim["viewport"], size)
-                # a quick flick: a slow drag did not open the app list of the AOSP launcher (Cuttlefish)
-                adb(a.serial, "shell", "input", "swipe", str(x1), str(y1), str(x2), str(y2), "250"); did = f"swipe {chev}"
+                did, moved = swipe_checked(a.serial, chev, aim["viewport"], size)
+                if not moved:
+                    # The script itself could not do what the guide asked. That is not the person being stuck, and
+                    # saying so would send the guide looking for another way. Stop and say what failed.
+                    transcript.append(f"[{time.time() - started:6.1f}s] HARNESS {did}")
+                    print(transcript[-1], flush=True)
+                    (out / "transcript.txt").write_text("\n".join(transcript), encoding="utf-8")
+                    adb(a.serial, "shell", "am", "broadcast", "-a", f"{PKG}.DEBUG_STOP", "-p", PKG)
+                    print(f"harness failure after {time.time() - started:.1f}s, {steps} armed steps → {out}")
+                    return 3
             elif verb == "press_guide" and arm["key"]:
                 code = {"BACK": "KEYCODE_BACK", "HOME": "KEYCODE_HOME", "APP_SWITCH": "KEYCODE_APP_SWITCH",
                         "ENTER": "KEYCODE_ENTER"}.get(arm["key"], "KEYCODE_BACK")
