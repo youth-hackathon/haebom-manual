@@ -118,6 +118,18 @@ class Guide:
 
         # 1. no manual for this request: artemis alone
         if mid is None:
+            # The person started from the guide app itself, which leaves its own windows out of the tree: neither a
+            # rule nor the model can read that screen (the model, seeing only the screenshot, guided buttons of the
+            # guide app). Whatever the task, the first thing is to go home. Said here, without asking a model.
+            if screen.package == GUIDE_APP and "replay" not in req and st.get("homed", 0) < 2:
+                with self._lock:
+                    st["homed"] = st.get("homed", 0) + 1
+                latency = round(time.time() - started, 3)
+                body = {"memo": "", "explain": "홈 화면으로 가요.", "action": {"name": "press_key", "key": "HOME"}, "source": "rule",
+                        "meta": {"source": "rule", "latency_s": latency, "model_calls": 0, "elements": len(screen.nodes)}}
+                print(f"[guide] {sid} step {req.get('step')} {event} -> guide app in front: HOME [{latency}s]", flush=True)
+                self._record(sid, {"request": _no_shot(req, None, st["device"]), "status": 200, "response": body})
+                return 200, body
             code, body = self._artemis(req)
             return self._answered(sid, st, req, screen, code, body, started, prev=None)
 

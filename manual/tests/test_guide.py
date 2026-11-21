@@ -283,6 +283,14 @@ class Front(Case):
         _, body = g.next(request("u", 1, "start", fake.screen("ai.toolus.mobileguide", [])))
         self.assertNotEqual(body["source"], "wait")
 
+    def test_a_task_with_no_manual_started_in_the_guide_app_goes_home_first_without_the_model(self):
+        g, art = self.guide([{"explain": "", "action": {"name": "click", "target": 1}}], authoring=False)
+        _, body = g.next(request("x", 1, "start", fake.screen("ai.toolus.mobileguide", []), task="유튜브 열어줘"))
+        self.assertEqual((body["source"], body["action"]), ("rule", {"name": "press_key", "key": "HOME"}))
+        self.assertEqual(len(art.asked), 0)
+        _, body = g.next(request("x", 2, "met", fake.home(), task="유튜브 열어줘"))
+        self.assertEqual(body["source"], "model")
+
     def test_a_step_that_left_the_person_stuck_stays_in_the_manual_but_is_not_guided_again(self):
         m = self.verified()
         g, art = self.guide([{"explain": "", "action": {"name": "ask_user", "question": "?"}}], authoring=False)

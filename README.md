@@ -254,7 +254,7 @@ python bench/run.py bench/workloads/bluetooth.jsonl bench/workloads/bluetooth-ag
 
 ### 테스트
 
-`python -m unittest discover -s manual/tests`, 67개 통과. 폰도 서버도 모델도 필요 없습니다. 규칙 엔진(찾기, 검토, 배우기, 요건 쌓기), 요청 처리 순서, 폰 설정값으로 완료 판단, 진입 단계를 다룹니다.
+`python -m unittest discover -s manual/tests`, 68개 통과. 폰도 서버도 모델도 필요 없습니다. 규칙 엔진(찾기, 검토, 배우기, 요건 쌓기), 요청 처리 순서, 폰 설정값으로 완료 판단, 진입 단계를 다룹니다.
 
 ## 에뮬레이터
 
