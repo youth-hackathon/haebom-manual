@@ -106,6 +106,15 @@ class Authoring(Case):
         self.assertEqual(len(art.asked), 1)
 
 
+    def test_a_rule_that_says_done_where_the_device_says_not_done_is_removed(self):
+        m = self.authored()
+        g, _ = self.guide([], authoring=True)
+        self.follow(g, "author-3", saver())
+        self.assertEqual(g.reject("author-3"), 5)
+        self.assertEqual([s["done_condition"]["name"] for s in self.manuals.get(m["id"])["steps"]], ["click"] * 4)
+        self.assertEqual(g.register("author-3")["new"], 0)
+
+
 class Front(Case):
     def test_a_draft_is_not_used_for_people(self):
         self.authored()  # status stays draft until every start state went through clean

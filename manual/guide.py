@@ -244,6 +244,23 @@ class Guide:
         print(f"[guide] {sid} session complete: {len(trace)} step(s) done, {len(kept)} kept by the review, {new} newly saved", flush=True)
         return {"done": len(trace), "kept": len(kept), "new": new, "not_saved": not_saved}
 
+    def reject(self, sid: str | None) -> int | None:
+        """Authoring: the session ended as "done" but the device says the task is not done.
+
+        Nothing of the session is saved. When it was a step of the manual that said "done", that step is removed:
+        its condition holds on a screen where the task is not done. Returns that step's place, or None.
+        """
+        st = self._sessions.get(sid or "")
+        if st is None:
+            return None
+        st["registered"] = True
+        last = st["last"]
+        if self.authoring and st["manual_id"] and last and last["source"] == "manual" and completed(last["action"]):
+            self.manuals.delete_step(st["manual_id"], last["step"]["id"])
+            print(f"[guide] {sid} step #{last['step']['seq']} said done where the task was not done: removed", flush=True)
+            return last["step"]["seq"]
+        return None
+
     # ---------------------------------------------------------------- views
 
     def summary(self, sid: str | None) -> dict | None:

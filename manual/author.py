@@ -1,4 +1,4 @@
-"""저작 서버: 에뮬레이터에서 요청을 실제로 따라 해 보면서 매뉴얼의 규칙을 만들고, 다시 돌려 검증한다.
+r"""저작 서버: 에뮬레이터에서 요청을 실제로 따라 해 보면서 매뉴얼의 규칙을 만들고, 다시 돌려 검증한다.
 
     python manual/author.py serve                                       # http://127.0.0.1:8780 (POST /author)
     python manual/author.py run "설정에서 블루투스 화면 열어줘" --id bluetooth   # 한 번 저작하고 끝낸다
@@ -13,6 +13,14 @@
        규칙으로 안내했는데 막힌 단계는 그 규칙을 지운다.
     5. 같은 시작 상태에서 다시 돌린다. 모델을 한 번도 부르지 않고 끝까지 가면 그 시작 상태는 통과다.
     6. 모든 시작 상태가 통과하면 매뉴얼의 status를 verified로 바꾼다. 앞단 서버는 그때부터 이 매뉴얼을 쓴다.
+
+"끝까지 갔다"는 안내가 그렇게 말했다는 뜻이 아니다. 매뉴얼에 목표(goal)가 있으면 실행이 끝날 때마다 기기에 직접 묻는다
+(adb shell 명령 하나와, 그 출력에 있어야 할 것). 기기가 아니라고 하면 그 실행은 끝까지 간 것이 아니고, 아무것도 등록하지
+않으며, "다 됐다"고 답한 규칙이 있으면 지운다. cold와 warm은 시작하기 전에 되돌리는 명령(reset)으로 일을 안 한 상태로 만든다.
+
+    python manual/author.py run "글자 크기 키우기" --id font-size \
+        --goal-shell "settings get system font_scale" --goal-expect "^(1\.[0-9]*[1-9]|[2-9])" \
+        --reset "settings put system font_scale 1.0"
 
 환경 변수: AUTHOR_HOST(127.0.0.1), AUTHOR_PORT(8780), ARTEMIS_URL(http://127.0.0.1:8765), MANUALS_DIR(../manuals),
 RUNS_DIR(../runs), DEVICE_SERIAL(127.0.0.1:6520, device/의 Cuttlefish), APP_APK(앱이 없을 때 설치할 APK).
@@ -57,6 +65,11 @@ class Device:
 
     def adb(self, *args: str, timeout: int = 60) -> subprocess.CompletedProcess:
         return subprocess.run([ADB, "-s", self.serial, *args], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+
+    def sh(self, command: str) -> str:
+        """One shell command on the device, as written (the device's shell reads its quotes)."""
+        r = self.adb("shell", command)
+        return (r.stdout or "") + (r.stderr or "")
 
     def model(self) -> str:
         return self.adb("shell", "getprop", "ro.product.model").stdout.strip() or "unknown"
@@ -169,6 +182,17 @@ class Author:
             log(f"manual {manual['id']} ({manual.get('status')}, {len(manual['steps'])} step(s)): {manual['task']}")
         mid = manual["id"]
         job["manual"] = mid
+        if job.get("goal") or job.get("reset"):
+            if job.get("goal"):
+                manual["goal"] = job["goal"]
+            if job.get("reset"):
+                manual["reset"] = job["reset"]
+            self.manuals.save(manual)
+        goal, reset = manual.get("goal"), manual.get("reset") or []
+        if goal:
+            log(f"goal, asked of the device after every run: `{goal['shell']}` must print /{goal['expect']}/")
+        else:
+            log("no goal given: a run is taken as done when the guide says so")
         out = self.runs_dir / f"{mid}-{job['id']}"
         report = {"manual": mid, "task": manual["task"], "device": None, "serial": dev.serial, "starts": {}, "runs": [], "status": "draft"}
         job["report"] = report
@@ -185,7 +209,7 @@ class Author:
             for start in starts:
                 clean, failures = False, 0
                 for n in range(1, rounds + 1):
-                    run = self._once(dev, manual["task"], start, packages, out / f"{start}-{n}", log)
+                    run = self._once(dev, manual["task"], start, packages, out / f"{start}-{n}", log, goal, reset)
                     report["runs"].append(run)
                     packages |= set(run["packages"])
                     if run["completed"] and run["manual_turns"] == 0 and run["model_turns"] > 0:
@@ -206,7 +230,7 @@ class Author:
                 report["starts"][start] = {"clean": clean, "runs": n}
             # Steps saved for the other start states are new to the cold path: it must still go through untouched.
             if saved_after_cold and "cold" in starts and report["starts"]["cold"]["clean"]:
-                run = self._once(dev, manual["task"], "cold", packages, out / "cold-final", log)
+                run = self._once(dev, manual["task"], "cold", packages, out / "cold-final", log, goal, reset)
                 report["runs"].append(run)
                 report["starts"]["cold"]["clean"] = run["clean"]
         finally:
@@ -230,13 +254,26 @@ class Author:
             log(f"artemis alone: {first['seconds']}s with {first['model_turns']} model turn(s) → from the manual ({last['start']}): {last['seconds']}s with 0")
         return report
 
-    def _once(self, dev: Device, task: str, start: str, packages: set[str], out: Path, log) -> dict:
+    def _goal(self, dev: Device, goal: dict | None) -> bool | None:
+        """What the device says about the task: True (done), False (not done), None (the manual has no goal)."""
+        if not goal:
+            return None
+        return re.search(goal["expect"], dev.sh(goal["shell"]), re.M) is not None
+
+    def _once(self, dev: Device, task: str, start: str, packages: set[str], out: Path, log, goal: dict | None = None,
+              reset: list[str] | None = None) -> dict:
         """One run from one start state: the stand-in human follows the guide to the end, then the session is settled."""
         cmd = [sys.executable, "-X", "utf8", "-I", str(HERE / "human.py"), task, "--serial", dev.serial, "--out", str(out),
                "--timeout", "300", "--max-steps", "25"] + ([] if start == "done" else ["--home"])
         code, text, sid, seconds = 1, "", None, 0.0
         for attempt in (1, 2, 3):
             dev.reset(start, packages)
+            if start != "done":
+                # the task must not be done already: undo it, and make sure the device agrees
+                for command in reset or []:
+                    dev.sh(command)
+                if self._goal(dev, goal):
+                    log(f"{start}: the device says the task is already done before the run; the reset commands do not undo it")
             before = self.guide.last_sid
             t0 = time.time()
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
@@ -255,10 +292,17 @@ class Author:
             break
         s = self.guide.summary(sid) or {"completed": False, "manual_turns": 0, "model_turns": 0, "events": [], "dropped": [], "packages": [],
                                         "manual_latency_s": [], "model_latency_s": []}
-        learned = self.guide.register(sid) if sid and s["completed"] and s["model_turns"] > 0 else {"new": 0, "not_saved": []}
-        completed = bool(s["completed"]) and code == 0
+        told_done = bool(s["completed"]) and code == 0
+        device_says = self._goal(dev, goal) if told_done else None
+        completed = told_done and device_says is not False
+        wrong_end = None
+        if told_done and device_says is False:
+            # The guide said "done" and the device says it is not. Nothing of this run is saved, and a rule that said so goes.
+            wrong_end = self.guide.reject(sid)
+        learned = self.guide.register(sid) if sid and completed and s["model_turns"] > 0 else {"new": 0, "not_saved": []}
         run = {
-            "start": start, "session": sid, "seconds": seconds, "completed": completed,
+            "start": start, "session": sid, "seconds": seconds, "completed": completed, "human_exit": code,
+            "goal": device_says, "told_done": told_done,
             "manual_turns": s["manual_turns"], "model_turns": s["model_turns"], "waits": s.get("waits", 0),
             "clean": completed and s["model_turns"] == 0 and not s["dropped"],
             "new_steps": learned["new"], "not_saved": learned["not_saved"], "dropped": s["dropped"],
@@ -266,7 +310,14 @@ class Author:
             "events": s["events"], "packages": s["packages"], "out": str(out),
         }
         tail = text.strip().splitlines()[-1:] or ["no output"]
-        log(f"{start}: {'reached the end' if completed else 'did NOT reach the end'} in {seconds}s, manual {run['manual_turns']} / model {run['model_turns']} turn(s)"
+        if told_done and device_says is False:
+            log(f"{start}: the guide said done, but the device says the task is NOT done"
+                + (f"; removed the rule that said so (#{wrong_end})" if wrong_end else ""))
+        if code == 3:
+            log(f"{start}: the stand-in human could not do what the guide showed (see its transcript); this run says nothing about the manual")
+        log(f"{start}: {'reached the end' if completed else 'did NOT reach the end'}"
+            + (" (the device confirms it)" if device_says else "")
+            + f" in {seconds}s, manual {run['manual_turns']} / model {run['model_turns']} turn(s)"
             + (f", saved {run['new_steps']} new step(s)" if run["new_steps"] else "")
             + (f", not saved: {run['not_saved']}" if run["not_saved"] else "")
             + (f", removed {len(run['dropped'])} step(s)" if run["dropped"] else "")
@@ -286,6 +337,11 @@ class Author:
             return 409, {"error": "another authoring job is running on the device"}
         job = self.new_job(task, body.get("id"), str(body.get("serial") or os.environ.get("DEVICE_SERIAL", DEFAULT_SERIAL)),
                            starts, int(body.get("rounds") or 3), bool(body.get("fresh")), os.environ.get("APP_APK", ""))
+        goal = body.get("goal")
+        if isinstance(goal, dict) and goal.get("shell") and goal.get("expect"):
+            job["goal"] = {"shell": str(goal["shell"]), "expect": str(goal["expect"])}
+        if isinstance(body.get("reset"), list):
+            job["reset"] = [str(c) for c in body["reset"]]
 
         def work() -> None:
             try:
@@ -359,6 +415,9 @@ def main() -> int:
     r.add_argument("--rounds", type=int, default=3, help="시작 상태마다 최대 몇 번 돌릴지")
     r.add_argument("--fresh", action="store_true", help="이 기기의 예전 규칙을 지우고 처음부터")
     r.add_argument("--apk", default=os.environ.get("APP_APK", ""), help="앱이 없을 때 설치할 APK")
+    r.add_argument("--goal-shell", default="", help="일이 됐는지 기기에 묻는 adb shell 명령")
+    r.add_argument("--goal-expect", default="", help="됐을 때 그 명령의 출력에 있어야 하는 것 (정규식)")
+    r.add_argument("--reset", action="append", default=[], help="일을 안 한 상태로 되돌리는 adb shell 명령 (여러 번 쓸 수 있다)")
     a = ap.parse_args()
 
     host = os.environ.get("AUTHOR_HOST", "127.0.0.1")
@@ -376,6 +435,12 @@ def main() -> int:
     if any(s not in STARTS for s in starts):
         ap.error(f"--starts must be among {','.join(STARTS)}")
     job = author.new_job(a.task, a.id, a.serial, starts, a.rounds, a.fresh, a.apk)
+    if bool(a.goal_shell) != bool(a.goal_expect):
+        ap.error("--goal-shell and --goal-expect go together")
+    if a.goal_shell:
+        job["goal"] = {"shell": a.goal_shell, "expect": a.goal_expect}
+    if a.reset:
+        job["reset"] = list(a.reset)
     try:
         report = author.run(job)
     except RuntimeError as exc:
