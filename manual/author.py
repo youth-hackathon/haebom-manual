@@ -229,6 +229,10 @@ class Author:
                         saved_after_cold = True
                     if run["clean"]:
                         clean = True
+                        if start == "cold":
+                            # the path from the start to the end, on the manual alone: read the requirement chain from it
+                            c = self.guide.chain(run["session"])
+                            log(f"cold: requirement chain read from this run: {c['requirements']} requirement(s) over {c['steps']} step(s)")
                         break
                     if not run["completed"]:
                         failures += 1
@@ -241,6 +245,16 @@ class Author:
                 run = self._once(dev, manual["task"], "cold", packages, out / "cold-final", log, goal, reset)
                 report["runs"].append(run)
                 report["starts"]["cold"]["clean"] = run["clean"]
+            for spec in job.get("mistakes") or []:
+                # A wrong tap on purpose (human.py --deviate STEP=KIND). The manual must bring the person back and the
+                # device must still say the task is done.
+                run = self._once(dev, manual["task"], "cold", packages, out / ("mistake-" + re.sub(r"[^A-Za-z0-9가-힣]+", "-", spec)),
+                                 log, goal, reset, deviate=spec)
+                run["mistake"] = spec
+                report["runs"].append(run)
+                report.setdefault("mistakes", []).append({"mistake": spec, "recovered": run["completed"], "seconds": run["seconds"],
+                                                           "manual_turns": run["manual_turns"], "model_turns": run["model_turns"],
+                                                           "rewinds": run.get("rewinds", 0)})
         finally:
             dev.restore(log)
 
@@ -253,7 +267,7 @@ class Author:
         m["verified"] = {
             "at": time.strftime("%Y-%m-%dT%H:%M:%S"), "device_model": device_model, "starts": report["starts"], "runs": len(report["runs"]),
             "model_turns_total": sum(r["model_turns"] for r in report["runs"]),
-            "clean_run": _brief(last),
+            "clean_run": _brief(last), "mistakes": report.get("mistakes", []),
         }
         self.manuals.save(m)
         (out / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -269,10 +283,10 @@ class Author:
         return re.search(goal["expect"], dev.sh(goal["shell"]), re.M) is not None
 
     def _once(self, dev: Device, task: str, start: str, packages: set[str], out: Path, log, goal: dict | None = None,
-              reset: list[str] | None = None) -> dict:
+              reset: list[str] | None = None, deviate: str = "") -> dict:
         """One run from one start state: the stand-in human follows the guide to the end, then the session is settled."""
         cmd = [sys.executable, "-X", "utf8", "-I", str(HERE / "human.py"), task, "--serial", dev.serial, "--out", str(out),
-               "--timeout", "300", "--max-steps", "25"] + ([] if start == "done" else ["--home"])
+               "--timeout", "300", "--max-steps", "25"] + ([] if start == "done" else ["--home"]) + (["--deviate", deviate] if deviate else [])
         code, text, sid, seconds = 1, "", None, 0.0
         for attempt in (1, 2, 3):
             dev.reset(start, packages)
@@ -310,7 +324,7 @@ class Author:
         learned = self.guide.register(sid) if sid and completed and s["model_turns"] > 0 else {"new": 0, "not_saved": []}
         run = {
             "start": start, "session": sid, "seconds": seconds, "completed": completed, "human_exit": code,
-            "goal": device_says, "told_done": told_done, "by_facts": bool(s.get("by_facts")),
+            "goal": device_says, "told_done": told_done, "by_facts": bool(s.get("by_facts")), "rewinds": s.get("rewinds", 0),
             "manual_turns": s["manual_turns"], "model_turns": s["model_turns"], "waits": s.get("waits", 0),
             "clean": completed and s["model_turns"] == 0 and not s["dropped"],
             "new_steps": learned["new"], "not_saved": learned["not_saved"], "dropped": s["dropped"],
@@ -323,8 +337,9 @@ class Author:
                 + (f"; removed the rule that said so (#{wrong_end})" if wrong_end else ""))
         if code == 3:
             log(f"{start}: the stand-in human could not do what the guide showed (see its transcript); this run says nothing about the manual")
-        log(f"{start}: {'reached the end' if completed else 'did NOT reach the end'}"
+        log(f"{start}{' with a wrong tap (' + deviate + ')' if deviate else ''}: {'reached the end' if completed else 'did NOT reach the end'}"
             + (" (the device confirms it)" if device_says else "")
+            + (f", went back {run['rewinds']} time(s)" if run["rewinds"] else "")
             + f" in {seconds}s, manual {run['manual_turns']} / model {run['model_turns']} turn(s)"
             + (f", saved {run['new_steps']} new step(s)" if run["new_steps"] else "")
             + (f", not saved: {run['not_saved']}" if run["not_saved"] else "")
@@ -430,6 +445,8 @@ def main() -> int:
     r.add_argument("--goal-shell", default="", help="일이 됐는지 기기에 묻는 adb shell 명령")
     r.add_argument("--goal-expect", default="", help="됐을 때 그 명령의 출력에 있어야 하는 것 (정규식)")
     r.add_argument("--reset", action="append", default=[], help="일을 안 한 상태로 되돌리는 adb shell 명령 (여러 번 쓸 수 있다)")
+    r.add_argument("--mistake", action="append", default=[],
+                   help="검증 뒤에 일부러 잘못 누르는 실행. 사람 역할의 --deviate 형식 (예: step8=tap:오후)")
     r.add_argument("--alias", action="append", default=[], help="같은 매뉴얼로 이어지는 다른 요청 문장 (여러 번 쓸 수 있다)")
     r.add_argument("--done-fact", default="", help="완료를 알려 주는 폰 설정값의 이름 (앱이 요청에 싣는 facts의 키: font_scale, next_alarm 등)")
     r.add_argument("--done-change", default="", choices=["", "increased", "decreased", "on", "off"], help="그 값이 세션 시작 때보다 어떻게 되면 완료인지")
@@ -460,6 +477,8 @@ def main() -> int:
         job["reset"] = list(a.reset)
     if a.alias:
         job["aliases"] = list(a.alias)
+    if a.mistake:
+        job["mistakes"] = list(a.mistake)
     if a.done_fact:
         if bool(a.done_change) == bool(a.done_equals):
             ap.error("--done-fact needs exactly one of --done-change and --done-equals")

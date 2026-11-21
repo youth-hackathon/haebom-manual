@@ -17,7 +17,8 @@ usage: python -I scripts/follow.py "와이파이 설정 화면 열어줘" [--ser
 --deviate STEP=KIND makes the human do something else the first time step STEP is shown, instead of following it:
 home | back | app:<package> | tap:<label> | tapid:<view id> | send:<words> (ChatGPT: type one's own ASCII words
 and send them) | swipe:<up|down|left|right> (the finger's direction, mid-screen). STEP is `step<N>`, the N-th
-armed guide. STEP:PHASE (open | type | submit) deviates when a typing step reaches that phase, e.g.
+armed guide, or `at:<words>`, the first step whose title has those words (`at:확인=tap:오후`).
+STEP:PHASE (open | type | submit) deviates when a typing step reaches that phase, e.g.
 `step3:submit=back` hides the keyboard after the search words are in. The script then keeps following whatever
 the guide shows and reports, per deviation, how long the guide took to show a step again and how many requests
 to the guide server that took.
@@ -325,6 +326,9 @@ def main() -> int:
             step_id = f"step{arm['step']}"
             at_phase = f"{step_id}:{arm['phase']}" if arm.get("phase") else None
             hit = at_phase if at_phase in plans else step_id if step_id in plans else None
+            if hit is None:
+                # `at:<words>`: the first step whose title has these words (step numbers move when the guide waits)
+                hit = next((k for k in plans if k.startswith("at:") and k[3:] in arm.get("title", "")), None)
             if hit:
                 kind = plans.pop(hit)
                 devs.append({"kind": kind, "at_step": hit, "t": None, "planner_calls": 0})

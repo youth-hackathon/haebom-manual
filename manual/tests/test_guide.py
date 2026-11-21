@@ -16,6 +16,7 @@ sys.path.insert(0, str(HERE.parent))
 
 import fake  # noqa: E402
 from guide import MAX_WAITS, Guide  # noqa: E402
+from screen import Screen  # noqa: E402
 from store import Manuals, norm_task  # noqa: E402
 
 TASK = "데이터 절약 모드를 켜고 싶어요"
@@ -115,6 +116,65 @@ class Authoring(Case):
         self.assertEqual(g.register("author-3")["new"], 0)
 
 
+class RequirementChain(Case):
+    def chained(self):
+        """The manual after a second run that went from the start to the end on the manual alone."""
+        m = self.authored()
+        g, _ = self.guide([], authoring=True)
+        self.follow(g, "author-2", saver())
+        self.read = g.chain("author-2")
+        return self.manuals.get(m["id"])
+
+    def test_what_a_step_changed_becomes_a_requirement_of_the_steps_after_it(self):
+        import rules
+        off, on = Screen.parse(fake.data_saver(False)), Screen.parse(fake.data_saver(True))
+        turn_on = {"id": 1, "seq": 1, "screen_condition": {"foreground": fake.SETTINGS}, "done_condition": {"name": "click"}}
+        after = {"id": 2, "seq": 2, "screen_condition": {"foreground": fake.SETTINGS}, "done_condition": {"name": "click"}}
+        requires = rules.chain([(turn_on, off), (after, on)])
+        self.assertEqual(requires[1], [])
+        self.assertEqual(len(requires[2]), 1)
+        self.assertIs(requires[2][0]["node"]["checked"], True)
+        after["requires"] = requires[2]
+        # the switch is on: the later step is guided. Turned off again (a wrong tap): it is not, and the earlier step is.
+        self.assertTrue(rules.kernel_holds(after, on))
+        self.assertFalse(rules.kernel_holds(after, off))
+        hit = rules.find({"manual_id": "m", "device_model": "d", "screen": off}, [turn_on, after])
+        self.assertEqual(hit["step"]["id"], 1)
+
+    def test_the_chain_is_read_from_a_run_on_the_manual_alone(self):
+        self.chained()
+        self.assertEqual(self.read["steps"], 4)  # the steps the person did; "done" is not something to do
+
+    def test_a_run_artemis_helped_with_gives_no_chain(self):
+        self.authored()
+        g, _ = self.guide([], authoring=True)
+        self.assertEqual(g.chain("author-1"), {"steps": 0, "requirements": 0})
+
+    def test_the_same_path_is_still_followed_with_the_chain(self):
+        m = self.chained()
+        m["status"] = "verified"
+        self.manuals.save(m)
+        g, art = self.guide([], authoring=False)
+        self.assertEqual([a["source"] for a in self.follow(g, "u", saver())], ["manual"] * 5)
+        self.assertEqual(art.asked, [])
+
+    def test_off_the_manuals_apps_the_person_is_sent_home_on_their_own_device_only(self):
+        m = self.chained()
+        m["status"] = "verified"
+        self.manuals.save(m)
+        entry = [s for s in m["steps"] if s.get("entry")]
+        self.assertEqual((len(entry), entry[0]["seq"], entry[0]["done_condition"]), (1, 0, {"name": "press_key", "key": "HOME"}))
+        elsewhere = fake.screen("com.example.other", [fake.node(text="다른 앱", bounds=(0, 200, 400, 300), pkg="com.example.other")])
+        own = request("u1", 1, "start", elsewhere)
+        own["device_model"] = fake.DEVICE
+        front = Guide(self.manuals, "http://artemis.invalid", authoring=False)  # as the front server runs: it knows no device
+        front._artemis = FakeArtemis([{"explain": "", "action": {"name": "press_key", "key": "BACK"}}])
+        answer = front.next(own)[1]
+        self.assertEqual((answer["source"], answer["action"]), ("manual", {"name": "press_key", "key": "HOME"}))
+        other = request("u2", 1, "start", elsewhere)  # a phone that does not say what it is: this device's step is not for it
+        self.assertEqual(front.next(other)[1]["source"], "model")
+
+
 class DoneByThePhonesSetting(Case):
     def manual(self) -> dict:
         m = self.authored()
@@ -196,7 +256,8 @@ class Front(Case):
         g, art = self.guide([{"explain": "뒤로", "action": {"name": "press_key", "key": "BACK"}}], authoring=False)
         first = g.next(request("u", 1, "start", fake.home()))[1]
         again = g.next(request("u", 2, "met", fake.connected()))[1]  # a wrong turn: not a screen of this manual
-        code, body = g.next(request("u", 3, "wait_done", fake.connected()))
+        g.next(request("u", 3, "wait_done", fake.connected()))
+        code, body = g.next(request("u", 4, "wait_done", fake.connected()))
         # one more look first (the screen a step led to may still be loading), then artemis
         self.assertEqual((first["source"], again["source"], again["action"]["name"]), ("manual", "wait", "wait_for_delay"))
         self.assertEqual((body["source"], body["action"]["name"]), ("model", "press_key"))
@@ -228,7 +289,8 @@ class Front(Case):
         g, _ = self.guide([], authoring=False)
         g.next(request("u", 1, "start", fake.home()))
         g.next(request("u", 2, "met", fake.connected()))
-        code, body = g.next(request("u", 3, "wait_done", fake.connected()))
+        g.next(request("u", 3, "wait_done", fake.connected()))
+        code, body = g.next(request("u", 4, "wait_done", fake.connected()))
         self.assertEqual(code, 502)
         self.assertIn("error", body)
 

@@ -29,6 +29,7 @@ from store import Manuals
 MAX_SERVES = 2      # a step guided this often in one session is not guided from the manual again
 MAX_WAITS = 5       # an app window that cannot be read yet is looked at again this many times before artemis is asked
 WAIT_MS = 600
+SETTLE_WAITS = 2    # looks at the screen a manual step led to before artemis is asked about it
 MAX_SESSIONS = 300  # kept in memory
 
 
@@ -166,17 +167,22 @@ class Guide:
                     st["completed"] = True
             latency = round(time.time() - started, 3)
             st["latency"].append(("manual", latency))
-            body = {"memo": "", "explain": step["instruction"], "action": action, "source": "manual",
+            back = bool(last and last["source"] == "manual" and step["seq"] < last["step"]["seq"])
+            if back:
+                st["rewinds"] = st.get("rewinds", 0) + 1
+                print(f"[guide] {sid} back from #{last['step']['seq']} to #{step['seq']}: what an earlier step set no longer holds", flush=True)
+            said = ("앞에서 맞춘 것이 바뀌었어요. 다시 맞춰 주세요. " if back else "") + step["instruction"]
+            body = {"memo": "", "explain": said, "action": action, "source": "manual",
                     "meta": {"source": "manual", "manual": mid, "step": step["seq"], "latency_s": latency, "model_calls": 0,
                              "elements": len(screen.nodes), "manual_turns": st["manual"], "model_turns": st["model"]}}
             print(f"[guide] {sid} step {req.get('step')} {event} -> manual {mid} #{step['seq']} {label(action)} [{latency}s]", flush=True)
             self._record(sid, {"request": _no_shot(req, mid, st["device"]), "status": 200, "response": body})
             return 200, body
 
-        # The first look at the screen a manual step led to, and no step knows it: it may still be loading (a list not
-        # filled in yet, a field not drawn). One more look costs under a second; asking the model costs ten.
-        if prev and prev["source"] == "manual" and event == "met" and st["waits"] < MAX_WAITS and "replay" not in req:
-            return self._wait(sid, st, req, mid, started, "the screen after a manual step matches no step yet")
+        # The screen a manual step led to, and no step knows it (or only the step just done still holds): it may still
+        # be loading (a list not filled in yet, a dialog not up yet). A look costs under a second; the model costs ten.
+        if last and last["source"] == "manual" and event in ("met", "wait_done") and st["waits"] < SETTLE_WAITS and "replay" not in req:
+            return self._wait(sid, st, req, mid, started, f"the screen after a manual step matches no step yet, {st['waits'] + 1}/{SETTLE_WAITS}")
 
         # 3. artemis
         areq = {k: v for k, v in req.items() if k not in ("manual_id", "device_model")}
@@ -298,6 +304,33 @@ class Guide:
         print(f"[guide] {sid} session complete: {len(trace)} step(s) done, {len(kept)} kept by the review, {new} newly saved", flush=True)
         return {"done": len(trace), "kept": len(kept), "new": new, "not_saved": not_saved}
 
+    def chain(self, sid: str | None) -> dict:
+        """Authoring: read the requirement chain from a run that went from the start to the end on the manual alone.
+
+        Every step of that run gets `requires`: what the steps before it changed and its own screen still showed.
+        A run that artemis helped with, or that did not end, says nothing here.
+        """
+        st = self._sessions.get(sid or "")
+        if st is None or not st["manual_id"] or not st["completed"] or st["model"]:
+            return {"steps": 0, "requirements": 0}
+        mid = st["manual_id"]
+        kept = rules.review({"manual_id": mid, "device_model": st["device"]}, list(st["trace"]))
+        path = [(e["step"], e["screen"]) for e in kept if e["source"] == "manual" and e.get("step")]
+        requires = rules.chain(path)
+        for step_id, conditions in requires.items():
+            self.manuals.set_requires(mid, step_id, conditions)
+        total = sum(len(v) for v in requires.values())
+        print(f"[guide] {sid} requirement chain over {len(path)} step(s): {total} requirement(s)", flush=True)
+        # the general first step: off the manual's apps altogether, go home (then the path's own steps lead back in)
+        packages = sorted({p for s in self.manuals.steps(mid) if s.get("device_model") == st["device"] and not s.get("entry")
+                           for p in _foregrounds(s["screen_condition"])})
+        self.manuals.set_entry(mid, st["device"], packages)
+        for step, _screen in path:
+            if requires.get(step["id"]):
+                print(f"[guide] {sid}   #{step['seq']} {label(rules.resolve(step['done_condition'], _screen) or step['done_condition'])} "
+                      f"requires {json.dumps(requires[step['id']], ensure_ascii=False)}", flush=True)
+        return {"steps": len(path), "requirements": total}
+
     def reject(self, sid: str | None) -> int | None:
         """Authoring: the session ended as "done" but the device says the task is not done.
 
@@ -324,7 +357,7 @@ class Guide:
         lat = st["latency"]
         return {
             "session": sid, "manual": st["manual_id"], "task": st["task"], "device": st["device"], "completed": st["completed"],
-            "by_facts": st["by_facts"],
+            "by_facts": st["by_facts"], "rewinds": st.get("rewinds", 0),
             "manual_turns": st["manual"], "model_turns": st["model"], "waits": st["waited"], "events": list(st["events"]),
             "dropped": list(st["dropped"]), "packages": sorted(st["packages"]),
             "manual_latency_s": [t for s, t in lat if s == "manual"], "model_latency_s": [t for s, t in lat if s == "model"],
@@ -368,6 +401,20 @@ class Guide:
                     f.write(json.dumps(line, ensure_ascii=False) + "\n")
         except OSError as exc:
             print(f"[guide] record failed: {exc}", flush=True)
+
+
+def _foregrounds(condition) -> set[str]:
+    out: set[str] = set()
+    if isinstance(condition, dict):
+        for k, v in condition.items():
+            if k == "foreground" and isinstance(v, str):
+                out.add(v)
+            else:
+                out |= _foregrounds(v)
+    elif isinstance(condition, list):
+        for c in condition:
+            out |= _foregrounds(c)
+    return out
 
 
 def _light(req: dict) -> dict:

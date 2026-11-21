@@ -40,9 +40,10 @@ def find(q: dict, steps: list[dict]) -> dict | None:
     """
     screen: Screen = q["screen"]
     own = [s for s in steps if s.get("device_model") == q.get("device_model")]
-    other = [s for s in steps if s.get("device_model") != q.get("device_model")]
+    # The entry step ("outside this manual's apps: go home") names a device's own launcher and apps: never another device's.
+    other = [s for s in steps if s.get("device_model") != q.get("device_model") and not s.get("entry")]
     for group in (own, other):
-        holding = [s for s in group if evaluate(s["screen_condition"], screen)]
+        holding = [s for s in group if kernel_holds(s, screen)]
         if not holding:
             continue
         step = max(holding, key=lambda s: s["seq"])
@@ -51,6 +52,66 @@ def find(q: dict, steps: list[dict]) -> dict | None:
         # falling back to an earlier step.
         return {"step": step, "action": action} if action is not None else None
     return None
+
+
+def kernel_holds(step: dict, screen: Screen) -> bool:
+    """A step's kernel: its own screen condition, and everything earlier steps achieved that it relies on (`requires`).
+
+    This is the triangle table of PLANEX (Fikes, Hart & Nilsson 1972): the kernel of step i holds when the rest of
+    the plan, from i on, still leads to the goal. Guiding the highest-numbered step whose kernel holds gives progress,
+    skipping what is already done, and going back when something an earlier step set has been undone (a wrong tap).
+    """
+    return evaluate(step["screen_condition"], screen) and all(evaluate(r, screen) for r in step.get("requires") or [])
+
+
+def changes(before: Screen, after: Screen) -> list[dict]:
+    """What a step left on the screen: named fields that now show another value, and switches that flipped.
+
+    Only state the screen keeps showing counts (the hour field of a time picker reading "8", "오전" being selected).
+    Each is a condition that holds on `after` and did not hold on `before`.
+    """
+    def named(s: Screen) -> dict[str, Node]:
+        seen: dict[str, list[Node]] = {}
+        for n in s.app_nodes:
+            if n.id:
+                seen.setdefault(n.id, []).append(n)
+        return {k: v[0] for k, v in seen.items() if len(v) == 1}
+
+    out: list[dict] = []
+    was, now = named(before), named(after)
+    for key, n in now.items():
+        old = was.get(key)
+        if old is not None and n.text and n.text != old.text and len(n.text) <= 30 and not n.editable and not n.checkable:
+            out.append({"node": {"id": key, "text": n.text}})
+    for n in after.app_nodes:
+        if not n.checkable:
+            continue
+        locator = locator_for(n, after)
+        if locator is None:
+            continue
+        old = locate(locator, before)
+        if old is not None and old.checkable and old.checked != n.checked:
+            out.append({"node": {**locator, "checked": n.checked}})
+    return [c for c in out if evaluate(c, after) and not evaluate(c, before)]
+
+
+def chain(path: list[tuple[dict, Screen]]) -> dict:
+    """The requirements each step of a followed path carries: {step id: [conditions]}.
+
+    `path` is the steps of one run that reached the end, in order, each with the screen it was guided on. What step i
+    changed is read from the next step's screen. Step j requires every earlier change that its own screen still showed
+    in that run: a later change of the same field has replaced the earlier one there, so only what stood is required.
+    """
+    effects = [changes(path[i][1], path[i + 1][1]) for i in range(len(path) - 1)]
+    out: dict = {}
+    for j, (step, screen) in enumerate(path):
+        requires: list[dict] = []
+        for i in range(j):
+            for c in effects[i]:
+                if c not in requires and evaluate(c, screen):
+                    requires.append(c)
+        out[step["id"]] = requires
+    return out
 
 
 def resolve(done: dict, screen: Screen) -> dict | None:

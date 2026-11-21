@@ -5,11 +5,12 @@
       "task": "설정에서 블루투스 화면 열어줘",       이 매뉴얼이 맡는 요청. 저작할 때 쓴 문장이다
       "aliases": ["블루투스 화면 열어줘"],            같은 일로 보는 다른 문장
       "status": "draft" | "verified",                앞단 서버는 verified만 쓴다
-      "steps": [{"id", "seq", "device_model", "instruction", "screen_condition", "done_condition"}],
+      "steps": [{"id", "seq", "device_model", "instruction", "screen_condition", "requires", "done_condition"}],
       "verified": {...}                               저작 서버가 남긴 검증 기록
     }
 
-단계의 순서(seq)가 뜻을 가진다: 지금 화면에 맞는 단계가 여럿이면 가장 뒤의 것을 안내한다(rules.find).
+단계의 순서(seq)가 뜻을 가진다: 지금 화면에서 커널이 성립하는 단계가 여럿이면 가장 뒤의 것을 안내한다(rules.find).
+단계의 커널 = 그 단계의 화면 조건(screen_condition) + 앞 단계들이 이뤄 놓아 계속 유지돼야 하는 것(requires).
 """
 
 from __future__ import annotations
@@ -150,6 +151,45 @@ class Manuals:
             m["steps"].sort(key=lambda s: (s["seq"], s["id"]))
             self.save(m)
             return sid
+
+    def set_entry(self, mid: str, device_model: str, packages: list[str]) -> int | None:
+        """The general first step of a device's path: on a screen of none of the manual's apps, go to the home screen.
+
+        It stands before every other step (seq 0), so it is guided only when no other kernel holds. This is what brings
+        a person back who left the app in the middle: home, then the steps that open the app, then where they were.
+        """
+        if not packages:
+            return None
+        with self._lock:
+            m = self._items.get(str(mid))
+            if m is None:
+                return None
+            condition = {"not": {"any": [{"foreground": p} for p in sorted(packages)]}}
+            for s in m["steps"]:
+                if s.get("entry") and s.get("device_model") == device_model:
+                    s["screen_condition"] = condition
+                    self.save(m)
+                    return s["id"]
+            sid = max((s["id"] for s in m["steps"]), default=0) + 1
+            m["steps"].append({"id": sid, "seq": 0, "device_model": device_model, "entry": True,
+                               "instruction": "홈 화면으로 가서 이어서 해요.", "screen_condition": condition,
+                               "done_condition": {"name": "press_key", "key": "HOME"}})
+            m["steps"].sort(key=lambda s: (s["seq"], s["id"]))
+            self.save(m)
+            return sid
+
+    def set_requires(self, mid: str, step_id: int, requires: list[dict]) -> None:
+        """What a step relies on from the steps before it (its kernel is its own condition and these)."""
+        with self._lock:
+            m = self._items.get(str(mid))
+            for s in (m or {}).get("steps", []):
+                if s["id"] == step_id:
+                    if requires:
+                        s["requires"] = requires
+                    else:
+                        s.pop("requires", None)
+            if m:
+                self.save(m)
 
     def delete_step(self, mid: str, step_id: int) -> None:
         with self._lock:
