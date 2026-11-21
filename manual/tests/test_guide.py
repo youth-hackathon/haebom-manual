@@ -276,6 +276,13 @@ class Front(Case):
         self.assertEqual(names, ["wait"] * MAX_WAITS + ["model"])
         self.assertEqual(len(art.asked), 1)
 
+    def test_the_guide_apps_own_screen_is_not_waited_for(self):
+        # the person starts the guide from inside the guide app: its windows are never in the tree it sends
+        self.verified()
+        g, art = self.guide([{"explain": "", "action": {"name": "press_key", "key": "HOME"}}], authoring=False)
+        _, body = g.next(request("u", 1, "start", fake.screen("ai.toolus.mobileguide", [])))
+        self.assertNotEqual(body["source"], "wait")
+
     def test_a_step_that_left_the_person_stuck_stays_in_the_manual_but_is_not_guided_again(self):
         m = self.verified()
         g, art = self.guide([{"explain": "", "action": {"name": "ask_user", "question": "?"}}], authoring=False)

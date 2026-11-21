@@ -30,6 +30,9 @@ MAX_SERVES = 2      # a step guided this often in one session is not guided from
 MAX_WAITS = 5       # an app window that cannot be read yet is looked at again this many times before artemis is asked
 WAIT_MS = 600
 SETTLE_WAITS = 2    # looks at the screen a manual step led to before artemis is asked about it
+# The guide app leaves its own windows out of the tree it sends. With that app in front the tree has no app node,
+# and no amount of waiting changes that: such a screen is judged at once (the entry step answers "go home").
+GUIDE_APP = "ai.toolus.mobileguide"
 MAX_SESSIONS = 300  # kept in memory
 
 
@@ -140,7 +143,7 @@ class Guide:
         # 2. the manual's steps
         # The app window cannot be read yet (the app is still drawing its screen): that is not a screen to judge, and
         # a rule answers faster than an app opens. Look again in a moment instead of asking the model about nothing.
-        if not screen.app_nodes and st["waits"] < MAX_WAITS and "replay" not in req:
+        if not screen.app_nodes and screen.package != GUIDE_APP and st["waits"] < MAX_WAITS and "replay" not in req:
             return self._wait(sid, st, req, mid, started, f"no readable app window, {st['waits'] + 1}/{MAX_WAITS}")
         hit = None
         try:
