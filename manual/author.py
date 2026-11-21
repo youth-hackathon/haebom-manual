@@ -66,10 +66,18 @@ class Device:
     def adb(self, *args: str, timeout: int = 60) -> subprocess.CompletedProcess:
         return subprocess.run([ADB, "-s", self.serial, *args], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
 
-    def sh(self, command: str) -> str:
-        """One shell command on the device, as written (the device's shell reads its quotes)."""
-        r = self.adb("shell", command)
-        return (r.stdout or "") + (r.stderr or "")
+    def sh(self, command: str, timeout: int = 20) -> str | None:
+        """One shell command on the device, as written (the device's shell reads its quotes).
+
+        None when it did not answer in time (asked twice): a query of an app that was just reset can hang.
+        """
+        for _ in (1, 2):
+            try:
+                r = self.adb("shell", command, timeout=timeout)
+                return (r.stdout or "") + (r.stderr or "")
+            except subprocess.TimeoutExpired:
+                time.sleep(2)
+        return None
 
     def model(self) -> str:
         return self.adb("shell", "getprop", "ro.product.model").stdout.strip() or "unknown"
@@ -280,7 +288,10 @@ class Author:
         """What the device says about the task: True (done), False (not done), None (the manual has no goal)."""
         if not goal:
             return None
-        return re.search(goal["expect"], dev.sh(goal["shell"]), re.M) is not None
+        said = dev.sh(goal["shell"])
+        if said is None:
+            return None  # the device did not answer: nothing is known, and nothing is concluded from that
+        return re.search(goal["expect"], said, re.M) is not None
 
     def _once(self, dev: Device, task: str, start: str, packages: set[str], out: Path, log, goal: dict | None = None,
               reset: list[str] | None = None, deviate: str = "") -> dict:
@@ -316,7 +327,10 @@ class Author:
                                         "manual_latency_s": [], "model_latency_s": []}
         told_done = bool(s["completed"]) and code == 0
         device_says = self._goal(dev, goal) if told_done else None
-        completed = told_done and device_says is not False
+        # with a goal, "done" needs the device's own yes; a device that did not answer confirms nothing
+        completed = told_done and (device_says is True if goal else True)
+        if told_done and goal and device_says is None:
+            log(f"{start}: the device did not answer the goal command; this run is not counted as done")
         wrong_end = None
         if told_done and device_says is False:
             # The guide said "done" and the device says it is not. Nothing of this run is saved, and a rule that said so goes.
