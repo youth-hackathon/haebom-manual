@@ -110,7 +110,7 @@ class Guide:
         if screen.package:
             st["packages"].add(screen.package)
         if prev is not None and prev["source"] != "wait":
-            self._settle(sid, st, prev, event, str(req.get("event_detail", "")))
+            self._settle(sid, st, prev, event, str(req.get("event_detail", "")), screen)
         last = st["last"]  # the step guided last (a wait in between is not a step)
 
         # 1. no manual for this request: artemis alone
@@ -248,7 +248,7 @@ class Guide:
 
     # ---------------------------------------------------------------- what the next request says about the last step
 
-    def _settle(self, sid: str, st: dict, prev: dict, event: str, detail: str) -> None:
+    def _settle(self, sid: str, st: dict, prev: dict, event: str, detail: str, screen: Screen | None = None) -> None:
         action = prev["action"]
         seq = prev["step"]["seq"] if prev["source"] == "manual" else None
         st["events"].append({"step": prev["req"]["step"], "source": prev["source"], "seq": seq, "action": label(action), "outcome": event})
@@ -258,7 +258,13 @@ class Guide:
         if swiped:
             event = "met"
             st["events"][-1]["outcome"] = "met (the swiped area gave way to another screen)"
-        if prev["source"] == "manual" and event in ("declared_stuck", "unaimable"):
+        # The target is gone because the screen is another one now (the person left, or tapped something else): the step
+        # did not mislead. It did only when its kernel still holds on this screen and the app could not aim it.
+        left = (event == "unaimable" and prev["source"] == "manual" and screen is not None
+                and not rules.kernel_holds(prev["step"], screen))
+        if left:
+            st["events"][-1]["outcome"] = "left (the screen is another one now)"
+        if prev["source"] == "manual" and event in ("declared_stuck", "unaimable") and not left:
             # The step misled on this screen. This session does not get it again. While authoring, a step that never
             # worked is removed; one that has worked before stays (its condition was met by a screen it is not for).
             worked = int(prev["step"].get("met") or 0)
