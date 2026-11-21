@@ -1,0 +1,218 @@
+{
+  "id": "font-size",
+  "task": "글자 크기 키우기",
+  "aliases": [],
+  "status": "verified",
+  "steps": [
+    {
+      "id": 1,
+      "seq": 1,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "앱 목록을 열기 위해 화면을 위로 올립니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.launcher3"
+          },
+          {
+            "node": {
+              "id": "workspace"
+            }
+          },
+          {
+            "node": {
+              "id": "accessibility_action_view"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "swipe",
+        "direction": "up"
+      }
+    },
+    {
+      "id": 2,
+      "seq": 2,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "글자 크기를 변경하기 위해 설정을 누릅니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.launcher3"
+          },
+          {
+            "node": {
+              "text": "설정"
+            }
+          },
+          {
+            "node": {
+              "id": "apps_list_view"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "text": "설정"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "seq": 3,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "디스플레이 메뉴를 눌러 글꼴 설정으로 이동합니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.settings"
+          },
+          {
+            "node": {
+              "text": "디스플레이"
+            }
+          },
+          {
+            "node": {
+              "text": "설정 검색"
+            }
+          },
+          {
+            "node": {
+              "text": "네트워크 및 인터넷"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "text": "디스플레이"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "seq": 4,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "글자 크기를 조절하기 위해 디스플레이 크기 및 텍스트를 누릅니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.settings"
+          },
+          {
+            "node": {
+              "text": "디스플레이 크기 및 텍스트"
+            }
+          },
+          {
+            "node": {
+              "desc": "디스플레이"
+            }
+          },
+          {
+            "node": {
+              "text": "밝기"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "text": "디스플레이 크기 및 텍스트"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "seq": 5,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "글꼴 크기를 키우기 위해 플러스(+) 버튼을 누릅니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.settings"
+          },
+          {
+            "node": {
+              "desc": "글꼴 크기 크게"
+            }
+          },
+          {
+            "node": {
+              "desc": "디스플레이 크기 및 텍스트"
+            }
+          },
+          {
+            "node": {
+              "desc": "미리보기"
+            }
+          },
+          {
+            "node": {
+              "id": "switchWidget",
+              "checked": false
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "desc": "글꼴 크기 크게"
+        }
+      }
+    }
+  ],
+  "created_at": "2026-11-21T12:22:07",
+  "updated_at": "2026-11-21T12:24:39",
+  "done": {
+    "fact": "font_scale",
+    "change": "increased",
+    "say": "글자가 커졌어요."
+  },
+  "goal": {
+    "shell": "settings get system font_scale",
+    "expect": "^(1\\.[0-9]*[1-9]|[2-9])"
+  },
+  "reset": [
+    "settings put system font_scale 1.0"
+  ],
+  "first_run": {
+    "start": "cold",
+    "seconds": 87.6,
+    "manual_turns": 0,
+    "model_turns": 6
+  },
+  "verified": {
+    "at": "2026-11-21T12:24:39",
+    "device_model": "Cuttlefish x86_64 phone 64-bit only",
+    "starts": {
+      "cold": {
+        "clean": true,
+        "runs": 2
+      },
+      "warm": {
+        "clean": true,
+        "runs": 1
+      },
+      "done": {
+        "clean": true,
+        "runs": 1
+      }
+    },
+    "runs": 4,
+    "model_turns_total": 6,
+    "clean_run": {
+      "start": "cold",
+      "seconds": 31.5,
+      "manual_turns": 5,
+      "model_turns": 0
+    }
+  }
+}

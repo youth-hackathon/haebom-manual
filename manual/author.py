@@ -182,7 +182,9 @@ class Author:
             log(f"manual {manual['id']} ({manual.get('status')}, {len(manual['steps'])} step(s)): {manual['task']}")
         mid = manual["id"]
         job["manual"] = mid
-        if job.get("goal") or job.get("reset"):
+        if job.get("goal") or job.get("reset") or job.get("done"):
+            if job.get("done"):
+                manual["done"] = job["done"]
             if job.get("goal"):
                 manual["goal"] = job["goal"]
             if job.get("reset"):
@@ -193,6 +195,8 @@ class Author:
             log(f"goal, asked of the device after every run: `{goal['shell']}` must print /{goal['expect']}/")
         else:
             log("no goal given: a run is taken as done when the guide says so")
+        if manual.get("done"):
+            log(f"done, read from the phone's own settings in every request: {json.dumps(manual['done'], ensure_ascii=False)}")
         out = self.runs_dir / f"{mid}-{job['id']}"
         report = {"manual": mid, "task": manual["task"], "device": None, "serial": dev.serial, "starts": {}, "runs": [], "status": "draft"}
         job["report"] = report
@@ -302,7 +306,7 @@ class Author:
         learned = self.guide.register(sid) if sid and completed and s["model_turns"] > 0 else {"new": 0, "not_saved": []}
         run = {
             "start": start, "session": sid, "seconds": seconds, "completed": completed, "human_exit": code,
-            "goal": device_says, "told_done": told_done,
+            "goal": device_says, "told_done": told_done, "by_facts": bool(s.get("by_facts")),
             "manual_turns": s["manual_turns"], "model_turns": s["model_turns"], "waits": s.get("waits", 0),
             "clean": completed and s["model_turns"] == 0 and not s["dropped"],
             "new_steps": learned["new"], "not_saved": learned["not_saved"], "dropped": s["dropped"],
@@ -337,6 +341,8 @@ class Author:
             return 409, {"error": "another authoring job is running on the device"}
         job = self.new_job(task, body.get("id"), str(body.get("serial") or os.environ.get("DEVICE_SERIAL", DEFAULT_SERIAL)),
                            starts, int(body.get("rounds") or 3), bool(body.get("fresh")), os.environ.get("APP_APK", ""))
+        if isinstance(body.get("done"), dict) and body["done"].get("fact"):
+            job["done"] = body["done"]
         goal = body.get("goal")
         if isinstance(goal, dict) and goal.get("shell") and goal.get("expect"):
             job["goal"] = {"shell": str(goal["shell"]), "expect": str(goal["expect"])}
@@ -418,6 +424,10 @@ def main() -> int:
     r.add_argument("--goal-shell", default="", help="일이 됐는지 기기에 묻는 adb shell 명령")
     r.add_argument("--goal-expect", default="", help="됐을 때 그 명령의 출력에 있어야 하는 것 (정규식)")
     r.add_argument("--reset", action="append", default=[], help="일을 안 한 상태로 되돌리는 adb shell 명령 (여러 번 쓸 수 있다)")
+    r.add_argument("--done-fact", default="", help="완료를 알려 주는 폰 설정값의 이름 (앱이 요청에 싣는 facts의 키: font_scale, next_alarm 등)")
+    r.add_argument("--done-change", default="", choices=["", "increased", "decreased", "on", "off"], help="그 값이 세션 시작 때보다 어떻게 되면 완료인지")
+    r.add_argument("--done-equals", default="", help="그 값이 무엇과 같으면 완료인지 (예: 08:00)")
+    r.add_argument("--done-say", default="", help="완료했을 때 보여 줄 말")
     a = ap.parse_args()
 
     host = os.environ.get("AUTHOR_HOST", "127.0.0.1")
@@ -441,6 +451,11 @@ def main() -> int:
         job["goal"] = {"shell": a.goal_shell, "expect": a.goal_expect}
     if a.reset:
         job["reset"] = list(a.reset)
+    if a.done_fact:
+        if bool(a.done_change) == bool(a.done_equals):
+            ap.error("--done-fact needs exactly one of --done-change and --done-equals")
+        job["done"] = {"fact": a.done_fact, **({"change": a.done_change} if a.done_change else {"equals": a.done_equals}),
+                       **({"say": a.done_say} if a.done_say else {})}
     try:
         report = author.run(job)
     except RuntimeError as exc:

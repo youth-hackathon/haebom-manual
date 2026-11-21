@@ -115,6 +115,46 @@ class Authoring(Case):
         self.assertEqual(g.register("author-3")["new"], 0)
 
 
+class DoneByThePhonesSetting(Case):
+    def manual(self) -> dict:
+        m = self.authored()
+        m["status"], m["done"] = "verified", {"fact": "font_scale", "change": "increased", "say": "글자가 커졌어요."}
+        self.manuals.save(m)
+        return m
+
+    def ask(self, g, sid, step, event, scr, facts):
+        req = request(sid, step, event, scr)
+        req["facts"] = facts
+        return g.next(req)[1]
+
+    def test_the_setting_having_grown_since_the_start_ends_the_session_without_a_model(self):
+        self.manual()
+        g, art = self.guide([], authoring=False)
+        first = self.ask(g, "u", 1, "start", fake.home(), {"font_scale": 1.0})
+        second = self.ask(g, "u", 2, "met", fake.settings_home(), {"font_scale": 1.15})
+        self.assertEqual((first["source"], second["source"], second["action"]["status"]), ("manual", "check", "completed"))
+        self.assertEqual(second["explain"], "글자가 커졌어요.")
+        self.assertEqual(art.asked, [])
+
+    def test_a_setting_that_was_already_big_at_the_start_is_not_done(self):
+        self.manual()
+        g, _ = self.guide([], authoring=False)
+        self.assertEqual(self.ask(g, "u", 1, "start", fake.home(), {"font_scale": 1.3})["source"], "manual")
+
+    def test_a_phone_that_reports_no_settings_is_guided_as_before(self):
+        self.manual()
+        g, _ = self.guide([], authoring=False)
+        self.assertEqual([a["source"] for a in self.follow(g, "u", saver())], ["manual"] * 5)
+
+    def test_equals(self):
+        m = self.manual()
+        m["done"] = {"fact": "next_alarm", "equals": "08:00"}
+        self.manuals.save(m)
+        g, _ = self.guide([], authoring=False)
+        self.assertEqual(self.ask(g, "u", 1, "start", fake.home(), {"next_alarm": ""})["source"], "manual")
+        self.assertEqual(self.ask(g, "u", 2, "met", fake.settings_home(), {"next_alarm": "08:00"})["source"], "check")
+
+
 class Front(Case):
     def test_a_draft_is_not_used_for_people(self):
         self.authored()  # status stays draft until every start state went through clean

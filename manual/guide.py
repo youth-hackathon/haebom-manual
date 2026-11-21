@@ -3,6 +3,8 @@
 앱이 보내는 요청과 받는 응답은 artemis 서버와 같다(docs/interface.md). 앱은 주소만 이쪽으로 바꾸면 된다.
 
     1. 요청 문장으로 매뉴얼을 고른다(같은 문장일 때만). 없으면 요청을 그대로 artemis 서버에 넘긴다.
+    1-1. 매뉴얼에 완료 조건(done)이 있으면 폰이 보낸 설정값(facts)으로 먼저 본다. 글자 크기가 세션을 시작할 때보다
+         커졌으면, 다음 알람이 08:00이면 바로 "다 됐다"를 답한다. 화면을 보고 판단하지 않고 모델도 부르지 않는다.
     2. 매뉴얼의 단계 가운데 지금 화면에 조건이 맞는 것을 찾는다. 여럿이면 가장 뒤의 것(rules.find).
        그 대상이 화면에 하나만 있으면 바로 답한다. 모델을 부르지 않는다.
     3. 없으면 받은 요청을 artemis 서버에 넘기고 그 답을 그대로 돌려준다.
@@ -32,6 +34,31 @@ MAX_SESSIONS = 300  # kept in memory
 
 def completed(action: dict) -> bool:
     return action.get("name") == "report_task_status" and action.get("status") == "completed"
+
+
+def done_by_facts(done: dict | None, before: dict, now: dict) -> bool:
+    """Whether the phone's own settings say the task is done.
+
+    `done` is {"fact": name, "equals": value} or {"fact": name, "change": "increased" | "decreased" | "on" | "off"}.
+    A change is counted from the settings the session started with. A phone that does not report the setting never
+    says done this way.
+    """
+    if not isinstance(done, dict) or done.get("fact") not in now:
+        return False
+    value, first = now[done["fact"]], before.get(done["fact"])
+    if "equals" in done:
+        return str(value) == str(done["equals"])
+    change = done.get("change")
+    number = isinstance(value, (int, float)) and not isinstance(value, bool) and isinstance(first, (int, float)) and not isinstance(first, bool)
+    if change == "increased":
+        return number and value > first
+    if change == "decreased":
+        return number and value < first
+    if change == "on":
+        return value is True
+    if change == "off":
+        return value is False
+    return False
 
 
 def label(action: dict) -> str:
@@ -68,7 +95,7 @@ class Guide:
                     "manual_id": manual["id"] if manual else None, "task": str(req.get("task", "")).split("\n\n", 1)[0],
                     "device": str(req.get("device_model") or self.device_model), "pending": None, "trace": [], "end": None,
                     "manual": 0, "model": 0, "served": {}, "skip": set(), "events": [], "dropped": [], "packages": set(),
-                    "last": None, "waits": 0, "waited": 0,
+                    "last": None, "waits": 0, "waited": 0, "facts0": dict(req.get("facts") or {}), "by_facts": False,
                     "completed": False, "registered": False, "started": started, "latency": [],
                 }
                 self.last_sid = sid
@@ -89,6 +116,25 @@ class Guide:
         if mid is None:
             code, body = self._artemis(req)
             return self._answered(sid, st, req, screen, code, body, started, prev=None)
+
+        # 1-1. the phone's own settings say the task is done: no screen is judged and no model is asked
+        manual = self.manuals.get(mid) or {}
+        facts = req.get("facts") if isinstance(req.get("facts"), dict) else {}
+        if done_by_facts(manual.get("done"), st["facts0"], facts) and "replay" not in req:
+            done = manual["done"]
+            said = str(done.get("say") or "다 됐어요.")
+            with self._lock:
+                st["completed"] = st["by_facts"] = True
+                st["pending"] = {"source": "wait"}  # nothing was guided: there is nothing to settle
+            body = {"memo": "", "explain": said, "source": "check",
+                    "action": {"name": "report_task_status", "status": "completed", "text": said},
+                    "meta": {"source": "check", "manual": mid, "fact": done["fact"], "value": facts.get(done["fact"]),
+                             "latency_s": round(time.time() - started, 3), "model_calls": 0,
+                             "manual_turns": st["manual"], "model_turns": st["model"]}}
+            print(f"[guide] {sid} step {req.get('step')} {event} -> done by the phone's setting {done['fact']}: "
+                  f"{st['facts0'].get(done['fact'])} -> {facts.get(done['fact'])}", flush=True)
+            self._record(sid, {"request": _no_shot(req, mid, st["device"]), "status": 200, "response": body})
+            return 200, body
 
         # 2. the manual's steps
         # The app window cannot be read yet (the app is still drawing its screen): that is not a screen to judge, and
@@ -227,6 +273,9 @@ class Guide:
                     last_seq = self.manuals.step_seq(mid, e["step"]["id"]) or last_seq
             else:
                 name = (e["reply"].get("action") or {}).get("name")
+                if name == "report_task_status" and (self.manuals.get(mid) or {}).get("done"):
+                    earlier.append(e["screen"])
+                    continue  # this manual's "done" is the phone's setting, not what a screen looks like
                 try:
                     step = rules.learn({"manual_id": mid, "device_model": device, "screen": e["screen"], "earlier": list(earlier)}, e["reply"])
                 except Exception as exc:  # noqa: BLE001
@@ -270,6 +319,7 @@ class Guide:
         lat = st["latency"]
         return {
             "session": sid, "manual": st["manual_id"], "task": st["task"], "device": st["device"], "completed": st["completed"],
+            "by_facts": st["by_facts"],
             "manual_turns": st["manual"], "model_turns": st["model"], "waits": st["waited"], "events": list(st["events"]),
             "dropped": list(st["dropped"]), "packages": sorted(st["packages"]),
             "manual_latency_s": [t for s, t in lat if s == "manual"], "model_latency_s": [t for s, t in lat if s == "model"],
