@@ -40,11 +40,11 @@ services:
       # 빌드 ID 로 고정했습니다. 브랜치의 최신 빌드를 받으려면
       # aosp-android-latest-release/aosp_cf_x86_64_only_phone-userdebug 로 바꿉니다.
       CF_BUILD: ${CF_BUILD:-16968706/aosp_cf_x86_64_only_phone-userdebug}
-      CF_CPUS: ${CF_CPUS:-4}
-      CF_MEMORY_MB: ${CF_MEMORY_MB:-4096}
-      CF_WIDTH: ${CF_WIDTH:-1080}
-      CF_HEIGHT: ${CF_HEIGHT:-2400}
-      CF_DPI: ${CF_DPI:-420}
+      CF_CPUS: ${CF_CPUS:-8}
+      CF_MEMORY_MB: ${CF_MEMORY_MB:-8192}
+      CF_WIDTH: ${CF_WIDTH:-720}
+      CF_HEIGHT: ${CF_HEIGHT:-1600}
+      CF_DPI: ${CF_DPI:-280}
       CF_GPU_MODE: ${CF_GPU_MODE:-guest_swiftshader}
       CF_LOCALE: ${CF_LOCALE:-ko-KR}
       CF_TIMEZONE: ${CF_TIMEZONE:-Asia/Seoul}
