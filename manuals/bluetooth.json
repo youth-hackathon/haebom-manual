@@ -1,0 +1,268 @@
+{
+  "id": "bluetooth",
+  "task": "설정에서 블루투스 화면 열어줘",
+  "aliases": [],
+  "status": "verified",
+  "steps": [
+    {
+      "id": 1,
+      "seq": 1,
+      "device_model": "sdk_gphone64_x86_64",
+      "instruction": "블루투스 설정을 확인하기 위해 먼저 설정 앱을 엽니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.google.android.apps.nexuslauncher"
+          },
+          {
+            "node": {
+              "text": "설정"
+            }
+          },
+          {
+            "node": {
+              "desc": "홈"
+            }
+          },
+          {
+            "node": {
+              "desc": "한눈에 보기"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "text": "설정"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "seq": 1,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "화면 위에서 아래로 쓸어내려 빠른 설정 창을 열어주세요.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.launcher3"
+          },
+          {
+            "node": {
+              "id": "workspace"
+            }
+          },
+          {
+            "node": {
+              "id": "accessibility_action_view"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "swipe",
+        "direction": "down"
+      }
+    },
+    {
+      "id": 3,
+      "seq": 2,
+      "device_model": "sdk_gphone64_x86_64",
+      "instruction": "블루투스 설정을 위해 '연결된 기기'를 누릅니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.settings"
+          },
+          {
+            "node": {
+              "text": "연결된 기기"
+            }
+          },
+          {
+            "node": {
+              "text": "설정 검색"
+            }
+          },
+          {
+            "node": {
+              "text": "Google"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "text": "연결된 기기"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "seq": 2,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "instruction": "블루투스 타일을 길게 눌러 블루투스 설정으로 이동합니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.systemui"
+          },
+          {
+            "node": {
+              "text": "블루투스"
+            }
+          },
+          {
+            "node": {
+              "desc": "Wi-Fi,null"
+            }
+          },
+          {
+            "node": {
+              "desc": "블루투스"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "long_press",
+        "target": {
+          "text": "블루투스"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "seq": 3,
+      "device_model": "sdk_gphone64_x86_64",
+      "instruction": "블루투스 설정을 위해 '연결 환경설정'을 눌러주세요.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.settings"
+          },
+          {
+            "node": {
+              "text": "연결 환경설정"
+            }
+          },
+          {
+            "node": {
+              "desc": "연결된 기기"
+            }
+          },
+          {
+            "node": {
+              "text": "새 기기와 페어링"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "text": "연결 환경설정"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "seq": 4,
+      "device_model": "sdk_gphone64_x86_64",
+      "instruction": "블루투스 화면을 열기 위해 블루투스를 누릅니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.settings"
+          },
+          {
+            "node": {
+              "text": "블루투스"
+            }
+          },
+          {
+            "node": {
+              "desc": "연결 환경설정"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "text": "블루투스"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "seq": 5,
+      "device_model": "sdk_gphone64_x86_64",
+      "instruction": "블루투스 설정 화면이 성공적으로 열렸습니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.settings"
+          },
+          {
+            "node": {
+              "desc": "블루투스"
+            }
+          },
+          {
+            "node": {
+              "text": "블루투스 사용"
+            }
+          },
+          {
+            "node": {
+              "id": "switch_widget",
+              "checked": true
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "report_task_status",
+        "status": "completed",
+        "text": "설정에서 블루투스 화면을 열었습니다."
+      }
+    }
+  ],
+  "created_at": "2026-11-21T10:56:22",
+  "updated_at": "2026-11-21T11:54:28",
+  "verified": {
+    "at": "2026-11-21T11:54:28",
+    "device_model": "Cuttlefish x86_64 phone 64-bit only",
+    "starts": {
+      "cold": {
+        "clean": true,
+        "runs": 2
+      },
+      "warm": {
+        "clean": true,
+        "runs": 1
+      },
+      "done": {
+        "clean": true,
+        "runs": 1
+      }
+    },
+    "runs": 4,
+    "model_turns_total": 5,
+    "clean_run": {
+      "start": "cold",
+      "seconds": 22.8,
+      "manual_turns": 5,
+      "model_turns": 0
+    }
+  },
+  "first_run": {
+    "start": "cold",
+    "seconds": 153.1,
+    "manual_turns": 0,
+    "model_turns": 7
+  }
+}

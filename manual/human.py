@@ -63,14 +63,16 @@ def swipe_for(chevron: str, vp, size):
     w, h = size
     l, t, r, b = vp if vp else (0, int(h * 0.12), w, int(h * 0.88))
     cx, cy = (l + r) // 2, (t + b) // 2
-    # The chevron points where the hidden content is; the finger moves the other way (artemis 70% → 30%).
+    # The chevron points where the hidden content is; the finger moves the other way. A person asked to "push the
+    # screen up" drags most of its length: a short drag (45 % of the height) did not open the app list of the AOSP
+    # launcher, so the finger travels from 80 % to 15 %.
     if chevron == "down":
-        return cx, t + int((b - t) * 0.75), cx, t + int((b - t) * 0.30)
+        return cx, t + int((b - t) * 0.80), cx, t + int((b - t) * 0.15)
     if chevron == "up":
-        return cx, t + int((b - t) * 0.30), cx, t + int((b - t) * 0.75)
+        return cx, t + int((b - t) * 0.20), cx, t + int((b - t) * 0.85)
     if chevron == "right":
-        return l + int((r - l) * 0.80), cy, l + int((r - l) * 0.25), cy
-    return l + int((r - l) * 0.25), cy, l + int((r - l) * 0.80), cy
+        return l + int((r - l) * 0.85), cy, l + int((r - l) * 0.15), cy
+    return l + int((r - l) * 0.15), cy, l + int((r - l) * 0.85), cy
 
 
 def find_on_screen(serial: str, label: str = "", view_id: str = ""):
