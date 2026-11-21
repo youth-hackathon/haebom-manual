@@ -235,6 +235,15 @@ def _candidates(screen: Screen) -> list[dict]:
     for n in screen.app_nodes:
         if n.id and not n.editable and not n.clickable:
             add("id", n.id)
+    # A field with an id that shows a value (the minutes of a time picker reading "00"): what it shows is the state of
+    # the screen. Text with digits is left out above because clocks and counters change by themselves; a named field
+    # is tied to its id here, and it comes last, so it is used only when nothing else tells the screen apart.
+    for n in sorted(screen.app_nodes, key=lambda n: (n.bounds[1], n.bounds[0])):
+        t = n.text.strip()
+        if n.id and t and not n.editable and len(t) <= 8 and any(ch.isdigit() for ch in t):
+            both = {"id": n.id, "text": n.text}
+            if both not in out and len(find_nodes(both, screen)) == 1:
+                out.append(both)
     return out
 
 
