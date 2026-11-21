@@ -5,6 +5,29 @@
   "status": "verified",
   "steps": [
     {
+      "id": 6,
+      "seq": 0,
+      "device_model": "Cuttlefish x86_64 phone 64-bit only",
+      "entry": true,
+      "instruction": "홈 화면으로 가서 이어서 해요.",
+      "screen_condition": {
+        "not": {
+          "any": [
+            {
+              "foreground": "com.android.launcher3"
+            },
+            {
+              "foreground": "com.android.settings"
+            }
+          ]
+        }
+      },
+      "done_condition": {
+        "name": "press_key",
+        "key": "HOME"
+      }
+    },
+    {
       "id": 1,
       "seq": 1,
       "device_model": "Cuttlefish x86_64 phone 64-bit only",
@@ -29,7 +52,8 @@
       "done_condition": {
         "name": "swipe",
         "direction": "up"
-      }
+      },
+      "met": 10
     },
     {
       "id": 2,
@@ -58,11 +82,12 @@
         "target": {
           "text": "설정"
         }
-      }
+      },
+      "met": 9
     },
     {
       "id": 3,
-      "seq": 3,
+      "seq": 4,
       "device_model": "Cuttlefish x86_64 phone 64-bit only",
       "instruction": "디스플레이 메뉴를 눌러 글꼴 설정으로 이동합니다.",
       "screen_condition": {
@@ -92,11 +117,12 @@
         "target": {
           "text": "디스플레이"
         }
-      }
+      },
+      "met": 5
     },
     {
       "id": 4,
-      "seq": 4,
+      "seq": 5,
       "device_model": "Cuttlefish x86_64 phone 64-bit only",
       "instruction": "글자 크기를 조절하기 위해 디스플레이 크기 및 텍스트를 누릅니다.",
       "screen_condition": {
@@ -126,11 +152,12 @@
         "target": {
           "text": "디스플레이 크기 및 텍스트"
         }
-      }
+      },
+      "met": 5
     },
     {
       "id": 5,
-      "seq": 5,
+      "seq": 6,
       "device_model": "Cuttlefish x86_64 phone 64-bit only",
       "instruction": "글꼴 크기를 키우기 위해 플러스(+) 버튼을 누릅니다.",
       "screen_condition": {
@@ -166,11 +193,12 @@
         "target": {
           "desc": "글꼴 크기 크게"
         }
-      }
+      },
+      "met": 9
     }
   ],
   "created_at": "2026-11-21T12:22:07",
-  "updated_at": "2026-11-21T12:24:39",
+  "updated_at": "2026-11-21T12:57:16",
   "done": {
     "fact": "font_scale",
     "change": "increased",
@@ -190,12 +218,12 @@
     "model_turns": 6
   },
   "verified": {
-    "at": "2026-11-21T12:24:39",
+    "at": "2026-11-21T12:57:16",
     "device_model": "Cuttlefish x86_64 phone 64-bit only",
     "starts": {
       "cold": {
         "clean": true,
-        "runs": 2
+        "runs": 1
       },
       "warm": {
         "clean": true,
@@ -206,13 +234,31 @@
         "runs": 1
       }
     },
-    "runs": 4,
-    "model_turns_total": 6,
+    "runs": 5,
+    "model_turns_total": 1,
     "clean_run": {
       "start": "cold",
-      "seconds": 31.5,
+      "seconds": 28.2,
       "manual_turns": 5,
       "model_turns": 0
-    }
+    },
+    "mistakes": [
+      {
+        "mistake": "at:디스플레이 크기=home",
+        "recovered": true,
+        "seconds": 75.1,
+        "manual_turns": 8,
+        "model_turns": 1,
+        "rewinds": 1
+      },
+      {
+        "mistake": "at:글꼴 크기=back",
+        "recovered": true,
+        "seconds": 36.6,
+        "manual_turns": 7,
+        "model_turns": 0,
+        "rewinds": 1
+      }
+    ]
   }
 }

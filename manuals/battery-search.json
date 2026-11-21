@@ -1,0 +1,276 @@
+{
+  "id": "battery-search",
+  "task": "설정에서 battery를 검색해줘",
+  "aliases": [],
+  "status": "verified",
+  "steps": [
+    {
+      "id": 1,
+      "seq": 1,
+      "device_model": "sdk_gphone64_x86_64",
+      "instruction": "설정 앱을 엽니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.google.android.apps.nexuslauncher"
+          },
+          {
+            "node": {
+              "text": "설정"
+            }
+          },
+          {
+            "node": {
+              "desc": "홈"
+            }
+          },
+          {
+            "node": {
+              "desc": "한눈에 보기"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "text": "설정"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "seq": 2,
+      "device_model": "sdk_gphone64_x86_64",
+      "instruction": "설정 메인 화면으로 가기 위해 뒤로가기를 누릅니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.settings"
+          },
+          {
+            "node": {
+              "desc": "위로 탐색"
+            }
+          },
+          {
+            "node": {
+              "desc": "블루투스"
+            }
+          },
+          {
+            "node": {
+              "text": "블루투스 사용"
+            }
+          },
+          {
+            "node": {
+              "id": "switch_widget",
+              "checked": true
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "desc": "위로 탐색"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "seq": 3,
+      "device_model": "sdk_gphone64_x86_64",
+      "instruction": "설정 메인 화면으로 이동하기 위해 뒤로 가기를 누릅니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.settings"
+          },
+          {
+            "node": {
+              "desc": "위로 탐색"
+            }
+          },
+          {
+            "node": {
+              "desc": "연결 환경설정"
+            }
+          },
+          {
+            "node": {
+              "text": "블루투스"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "desc": "위로 탐색"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "seq": 4,
+      "device_model": "sdk_gphone64_x86_64",
+      "instruction": "설정 메인 화면으로 돌아가기 위해 뒤로가기를 누릅니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.settings"
+          },
+          {
+            "node": {
+              "desc": "위로 탐색"
+            }
+          },
+          {
+            "node": {
+              "desc": "연결된 기기"
+            }
+          },
+          {
+            "node": {
+              "text": "저장된 기기"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "desc": "위로 탐색"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "seq": 5,
+      "device_model": "sdk_gphone64_x86_64",
+      "instruction": "상단의 설정 검색창을 터치해 검색을 시작합니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.android.settings"
+          },
+          {
+            "node": {
+              "text": "설정 검색"
+            }
+          },
+          {
+            "node": {
+              "text": "Google"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "click",
+        "target": {
+          "text": "설정 검색"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "seq": 6,
+      "device_model": "sdk_gphone64_x86_64",
+      "instruction": "검색창에 'battery'를 입력합니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.google.android.settings.intelligence"
+          },
+          {
+            "node": {
+              "id": "open_search_view_edit_text"
+            }
+          },
+          {
+            "node": {
+              "id": "open_search_view_root"
+            }
+          },
+          {
+            "node": {
+              "id": "search_scrollview"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "input_text",
+        "text": "battery",
+        "target": {
+          "id": "open_search_view_edit_text"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "seq": 7,
+      "device_model": "sdk_gphone64_x86_64",
+      "instruction": "설정에서 battery 검색을 완료했습니다.",
+      "screen_condition": {
+        "all": [
+          {
+            "foreground": "com.google.android.settings.intelligence"
+          },
+          {
+            "node": {
+              "text": "도움말 및 지원에서 검색해 보세요"
+            }
+          },
+          {
+            "node": {
+              "text": "battery 검색결과 없음"
+            }
+          }
+        ]
+      },
+      "done_condition": {
+        "name": "report_task_status",
+        "status": "completed",
+        "text": "설정 검색창에서 'battery'를 검색하였으며, 검색 결과 화면이 표시되었습니다."
+      }
+    }
+  ],
+  "created_at": "2026-11-21T11:20:03",
+  "updated_at": "2026-11-21T11:22:27",
+  "first_run": {
+    "start": "cold",
+    "seconds": 100.8,
+    "manual_turns": 0,
+    "model_turns": 7
+  },
+  "verified": {
+    "at": "2026-11-21T11:22:27",
+    "device_model": "sdk_gphone64_x86_64",
+    "starts": {
+      "cold": {
+        "clean": true,
+        "runs": 2
+      },
+      "warm": {
+        "clean": true,
+        "runs": 1
+      },
+      "done": {
+        "clean": true,
+        "runs": 1
+      }
+    },
+    "runs": 4,
+    "model_turns_total": 7,
+    "clean_run": {
+      "start": "cold",
+      "seconds": 21.0,
+      "manual_turns": 4,
+      "model_turns": 0
+    }
+  }
+}
