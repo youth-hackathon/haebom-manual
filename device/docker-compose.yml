@@ -1,0 +1,73 @@
+name: haebom-device
+
+services:
+  # Docker Desktop(WSL2) VM 은 켜질 때 kvm, vhost 모듈을 올리지 않습니다.
+  # cuttlefish 컨테이너가 만들어지기 전에 모듈을 올려 /dev/kvm 등이 보이게 합니다.
+  # 장치 파일이 이미 있으면(일반 Linux 호스트) 아무것도 하지 않고 끝납니다.
+  kvm-modules:
+    image: alpine:3.22
+    privileged: true
+    network_mode: none
+    restart: "no"
+    volumes:
+      - /lib/modules:/lib/modules:ro
+    command:
+      - sh
+      - -c
+      - |
+        # 이 컨테이너의 /dev 는 만들어질 때의 목록이라, 방금 올린 모듈은 /sys 로 확인합니다.
+        has() { [ -e "/dev/$$1" ] || [ -e "/sys/class/misc/$$2" ]; }
+        ready() { has kvm kvm && has vhost-net vhost-net && has vhost-vsock vhost-vsock && has net/tun tun; }
+        if ! ready; then
+          modprobe kvm_intel 2>/dev/null || modprobe kvm_amd 2>/dev/null
+          for m in vhost_vsock vhost_net tun bridge; do modprobe "$$m"; done
+        fi
+        if ! ready; then
+          echo "kvm, vhost-net, vhost-vsock, tun 중 없는 장치가 있습니다."
+          exit 1
+        fi
+        echo "커널 모듈 준비 완료"
+
+  cuttlefish:
+    # cuttlefish-orchestration:stable 의 2026-11-21 시점 digest (호스트 패키지 1.57.15)
+    image: us-docker.pkg.dev/android-cuttlefish-artifacts/cuttlefish-orchestration/cuttlefish-orchestration@sha256:20917e0072c482ddbd5992d874fee7159e5f98730679ac15c5f92dd8f34a7f7f
+    depends_on:
+      kvm-modules:
+        condition: service_completed_successfully
+    privileged: true
+    entrypoint: ["/bin/bash", "/device/entrypoint.sh"]
+    environment:
+      # 빌드 ID 로 고정했습니다. 브랜치의 최신 빌드를 받으려면
+      # aosp-android-latest-release/aosp_cf_x86_64_only_phone-userdebug 로 바꿉니다.
+      CF_BUILD: ${CF_BUILD:-16968706/aosp_cf_x86_64_only_phone-userdebug}
+      CF_CPUS: ${CF_CPUS:-4}
+      CF_MEMORY_MB: ${CF_MEMORY_MB:-4096}
+      CF_WIDTH: ${CF_WIDTH:-1080}
+      CF_HEIGHT: ${CF_HEIGHT:-2400}
+      CF_DPI: ${CF_DPI:-420}
+      CF_GPU_MODE: ${CF_GPU_MODE:-guest_swiftshader}
+      CF_LOCALE: ${CF_LOCALE:-ko-KR}
+      CF_TIMEZONE: ${CF_TIMEZONE:-Asia/Seoul}
+      # 한글 키보드(HeliBoard). 넣지 않으려면 CF_KEYBOARD_URL 을 빈 값으로 줍니다.
+      CF_KEYBOARD_URL: ${CF_KEYBOARD_URL-https://github.com/HeliBorg/HeliBoard/releases/download/v4.2/HeliBoard_4.2-release.apk}
+    volumes:
+      - ./entrypoint.sh:/device/entrypoint.sh:ro
+      - cf-build:/cf/build        # 내려받은 호스트 도구와 Android 이미지
+      - cf-state:/var/tmp/cvd     # 기기 상태(userdata 포함)와 cvd 의 기기 목록
+    ports:
+      - "127.0.0.1:6520:6520"                     # adb
+      - "127.0.0.1:1443:1443"                     # WebRTC 화면 (operator, HTTPS)
+      - "127.0.0.1:15550-15599:15550-15599/tcp"   # WebRTC 미디어
+      - "127.0.0.1:15550-15599:15550-15599/udp"
+    stop_grace_period: 90s
+    healthcheck:
+      test: ["CMD", "test", "-f", "/run/device-ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 30m
+    restart: "no"
+
+volumes:
+  cf-build:
+  cf-state:
