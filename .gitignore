@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+# 저작과 확인의 기록: 스크린샷과 세션 기록은 로컬에 둔다
+runs/
+# 기기 이미지 (device/)
+device/images/
+device/.cache/
